@@ -1,0 +1,12 @@
+# Render Blueprint for the Hoofquake server (free web service plan supports WebSockets).
+# In Render: New → Blueprint → point it at this repo and set the blueprint path to hoofquake/server/render.yaml
+services:
+  - type: web
+    name: hoofquake
+    runtime: node
+    plan: free
+    rootDir: hoofquake
+    buildCommand: cd server && npm ci --omit=dev
+    startCommand: node server/server.js
+    healthCheckPath: /healthz
+    autoDeploy: true
