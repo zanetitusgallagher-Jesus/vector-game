@@ -120,6 +120,20 @@ kbd { display: inline-block; background: var(--cream); color: var(--ink); border
 #crosshair { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 2px solid rgba(255,255,255,.9); border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.5); pointer-events: none; display: none; }
 #crosshair::after { content: ''; position: absolute; left: 8px; top: 8px; width: 2px; height: 2px; background: #fff; }
 body.aiming #crosshair { display: block; }
+#touch .tb[data-act=heavy] { left: max(24px, env(safe-area-inset-left)); bottom: 172px; }
+#touch .tb[data-act=sound] { left: max(90px, calc(env(safe-area-inset-left) + 66px)); bottom: 172px; }
+#touch .tb[data-act=sniff] { left: max(156px, calc(env(safe-area-inset-left) + 132px)); bottom: 172px; }
+#vitals { display: flex; flex-direction: column; gap: 4px; width: 200px; background: rgba(18,32,31,.7); padding: 6px 8px; border-radius: 10px; }
+.vb { position: relative; height: 9px; background: #0e1a19; border-radius: 6px; overflow: hidden; }
+.vb i { position: absolute; inset: 0 auto 0 0; width: 100%; border-radius: 6px; }
+.vb.hp { height: 13px; } .vb.hp i { background: linear-gradient(90deg, #e2573f, #ff8a70); } .vb.hp span { position: absolute; inset: 0; font: 800 10px var(--body); text-align: center; line-height: 13px; }
+.vb.st i { background: var(--sun); } .vb.xp { flex: 1; height: 6px; } .vb.xp i { background: var(--mint); }
+.lv { display: flex; gap: 6px; align-items: center; } .lv b { font: 800 12px var(--body); color: var(--mint); }
+#hurtFx { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 160px 40px rgba(220,40,20,.9); opacity: 0; transition: opacity .15s; z-index: 3; }
+#heist { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); background: var(--panel); border: 2px solid var(--coral); border-radius: 12px; padding: 8px 14px; z-index: 6; text-align: center; font: 800 13px var(--body); }
+#heist div { width: 260px; height: 10px; background: #0e1a19; border-radius: 6px; margin-top: 6px; overflow: hidden; } #heist i { display: block; height: 100%; width: 0; background: var(--coral); }
+body.sniffing #game canvas { filter: sepia(.5) saturate(1.6) hue-rotate(-15deg) brightness(.85); }
+.floater.xp { color: var(--mint); font-weight: 900; } .floater.dmg { color: #ff8a70; font-weight: 900; }
 #touch .tb[data-act=emote] { right: max(170px, calc(env(safe-area-inset-right) + 144px)); bottom: 182px; }
 #tMenu, #tMap { top: 176px; right: max(12px, env(safe-area-inset-right)); width: 64px; }
 #tMap { top: 216px; }
@@ -230,12 +244,15 @@ textarea.code { width: 100%; height: 90px; background: #0e1a19; color: var(--min
 <div id="floaters"></div>
 <div id="tags"></div>
 <div id="crosshair"></div>
+<div id="hurtFx"></div>
+<div id="heist" hidden><b>Hacking the vault</b><div><i></i></div></div>
 <div id="chatBox"><div id="chatLog"></div><form id="chatForm" hidden><input id="chatInput" maxlength="140" autocomplete="off" placeholder="Say something… (Enter to send)"></form></div>
 
 <div id="hud">
   <div class="hudTL">
     <div id="coinBox"><span id="coins">0</span></div>
     <div id="animalName"></div>
+    <div id="vitals"><div class="vb hp"><i></i><span></span></div><div class="vb st"><i></i></div><div class="lv"><b id="lvl">Lv 1</b><div class="vb xp"><i></i></div></div></div>
   </div>
   <div class="hudTR">
     <div class="clockRow"><span id="weather"></span><span id="clock"></span><span id="heat" hidden></span><span id="saveDot"></span></div>
@@ -269,6 +286,9 @@ textarea.code { width: 100%; height: 90px; background: #0e1a19; color: var(--min
   <button class="tb" data-act="ragdoll" type="button">FLOP</button>
   <button class="tb" data-act="emote" type="button">EMOTE</button>
   <button class="tb" data-act="gadget" type="button">GUN</button>
+  <button class="tb" data-act="heavy" type="button">HEAVY</button>
+  <button class="tb" data-act="sound" type="button">SOUND</button>
+  <button class="tb" data-act="sniff" type="button">SNIFF</button>
   <button class="tb" id="tMenu" type="button">MENU</button>
   <button class="tb" id="tMap" type="button">MAP</button>
 </div>
@@ -277,7 +297,7 @@ textarea.code { width: 100%; height: 90px; background: #0e1a19; color: var(--min
   <div class="menuCard">
     <div>
       <h1 class="logo">HOOF<br>QUAKE<small>An animal sandbox</small></h1>
-      <p class="pitch">Two worlds, everything free. Forty animals, one very patient town. Headbutt traffic, lick strangers, buy a mansion, find the cryptid in the pines, and collect hundreds of hats along the way.</p>
+      <p class="pitch">Hoofquake and Scentline in one world, everything free. Forty-three animals, towns, planets and a very patient police force. Headbutt traffic, lick strangers, buy a mansion, find the cryptid in the pines, and collect hundreds of hats along the way.</p>
     </div>
     <div class="menuBtns">
       <button class="mbtn primary alt" id="btnContinue" type="button" hidden>Continue</button>
@@ -292,9 +312,8 @@ textarea.code { width: 100%; height: 90px; background: #0e1a19; color: var(--min
       <button class="mbtn" data-menu="map" type="button">🗺️ World Map</button>
       <button class="mbtn" data-menu="multiplayer" type="button">👥 Multiplayer</button>
       <button class="mbtn" data-menu="settings" type="button">⚙️ Settings</button>
-      <a class="mbtn primary alt" href="scentline/" id="btnScentline" style="text-decoration:none">🐕 Travel to Scentline — a second world</a>
       <div id="saveNote"></div>
-      <div class="controlsHint"><b>PC:</b> WASD move · Mouse look · Space jump/fly · Shift sprint · Click / F headbutt · Right-click / G lick &amp; throw · Q special · E interact &amp; drive · R ragdoll · C dive · 1–4 emotes · M map · J missions · K customize · Esc menu<br><b>Mobile:</b> left stick moves, drag the right side to look, buttons for everything else.</div>
+      <div class="controlsHint"><b>PC:</b> WASD move · Mouse look · Space jump/fly · Shift sprint · Click / F attack · Right-click / G lick &amp; throw · Q special · V heavy attack · B animal sound · hold Z sniff · X weapons · E interact, drive &amp; hijack · R ragdoll · C dive · 1–4 emotes · M map · J missions · K customize · Esc menu<br><b>Mobile:</b> left stick moves, drag the right side to look, buttons for everything else.</div>
     </div>
   </div>
 </div>
@@ -332,6 +351,9 @@ textarea.code { width: 100%; height: 90px; background: #0e1a19; color: var(--min
 <script src="js/state.js"></script>
 <script src="js/mayhem.js"></script>
 <script src="js/missions.js"></script>
+<script src="js/scent.js"></script>
+<script src="js/arsenal.js"></script>
+<script src="js/places.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/net.js"></script>
 <script src="js/main.js"></script>

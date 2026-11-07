@@ -36,6 +36,13 @@ H.SITES = {
   ufo: { x: 1300, z: 900, r: 40, h: null, name: 'Crash Site' },
   temple: { x: 1060, z: -940, r: 50, h: null, name: 'Sunken Temple' },
   observatory: { x: -160, z: -1330, r: 30, h: null, name: 'Peak Observatory' },
+  // from Scentline
+  dustwater: { x: 1130, z: 830, r: 65, h: 9, name: 'Dustwater' },
+  frostpeak: { x: -450, z: -1000, r: 75, h: 45, name: 'Frostpeak Ski Village' },
+  raceway: { x: 960, z: 330, r: 125, h: 5, name: 'Scentline Raceway' },
+  military: { x: 860, z: -470, r: 115, h: 5, name: 'Fort Grizzle Military Base' },
+  bank: { x: 345, z: 150, r: 30, h: 3, name: 'Bleatsburg Bank' },
+  brambles: { x: 360, z: -1080, r: 40, h: null, name: 'Northern Rocks' },
 };
 H.RIVER = z => 640 + 70 * Math.sin(z / 180) + 25 * Math.sin(z / 61); // river centerline x(z)
 
@@ -79,6 +86,9 @@ H.ANIMALS = [
   { id: 'mechabear', name: 'Mecha Bear', price: 45000, col: '#d04a3a', col2: '#2a2a30', kind: 'quad', body: [1.6, 1.5, 2.1], leg: 0.9, neck: 0.3, head: 0.75, ears: 'round', tail: 'short', robot: 1, scale: 1.3, stats: { spd: 11, jmp: 11, mass: 6, swim: 0.3 }, atk: 'punch', sp: 'rocket', voice: ['robot', 120], desc: 'Shoulder-mounted rocket launcher. Very legal.' },
   { id: 'unicorn', name: 'Unicorn', price: 60000, col: '#fbf7ff', col2: '#ff8ad8', kind: 'quad', body: [1.0, 1.1, 2.2], leg: 1.4, neck: 1.0, head: 0.6, horns: 'unicorn', ears: 'pointy', tail: 'long', mane: 3, stats: { spd: 16, jmp: 14, mass: 2, swim: 0.7, glide: 1 }, atk: 'headbutt', sp: 'rainbowdash', voice: ['neigh', 760], desc: 'Gallops on rainbows. Everything it touches gets launched.' },
   { id: 'dragon', name: 'Dragon', price: 120000, col: '#2e8a4a', col2: '#ffcf3a', kind: 'quad', body: [1.4, 1.3, 2.4], leg: 0.8, neck: 1.0, head: 0.7, horns: 'dragon', ears: 'none', tail: 'dino', wings: 4, spikes: 1, scale: 1.5, stats: { spd: 12, jmp: 12, mass: 5, swim: 0.6, fly: 1 }, atk: 'bite', sp: 'firebreath', voice: ['dinoroar', 160], desc: 'Flies. Breathes fire. Ruins picnics.' },
+  // From Scentline
+  { id: 'boar', name: 'Boar', price: 7500, col: '#5a4030', col2: '#2e2018', kind: 'quad', body: [1.0, 0.9, 1.6], leg: 0.5, neck: 0.1, head: 0.62, snout: 1, tusks: 1, ears: 'pointy', tail: 'short', stats: { spd: 9, jmp: 8, mass: 3, swim: 0.7, dig: 1 }, atk: 'headbutt', sp: 'rampage', voice: ['grunt', 140], desc: 'Stocky and stubborn. Rampages through anything in its way.' },
+  { id: 'pitbull', name: 'Pit Bull', price: 9000, col: '#9a8a7a', col2: '#f4efe8', kind: 'quad', body: [0.75, 0.7, 1.2], leg: 0.55, neck: 0.2, head: 0.58, snout: 1, ears: 'pointy', tail: 'short', stats: { spd: 12, jmp: 18, mass: 1.6, swim: 0.7, dig: 1 }, atk: 'bite', sp: 'skyjump', voice: ['bark', 190], desc: 'Built like a truck. Jumps absurdly high and bites like a vice.' },
   // Secret unlocks — cannot be bought
   { id: 'mutant', name: 'Mutant Goat', price: -1, secret: 'Free the specimen in the hidden laboratory.', col: '#7ef25a', col2: '#3a1a5a', kind: 'quad', body: [1.1, 1.0, 1.7], leg: 0.8, neck: 0.6, head: 0.6, horns: 'goat', ears: 'floppy', tail: 'short', extraHeads: 1, glow: '#7ef25a', stats: { spd: 12, jmp: 14, mass: 1.8, swim: 1, climb: 0.8 }, atk: 'headbutt', sp: 'teleport', voice: ['bleat', 260], desc: 'Two heads, unstable atoms, short-range teleport.' },
   { id: 'slime', name: 'Lab Slime', price: -1, secret: 'Found in a vat deep in the hidden laboratory.', col: '#5af2c8', col2: '#2a9a7a', kind: 'blob', body: [1.4, 1.2, 1.4], leg: 0, neck: 0, head: 0, tail: 'none', glow: '#5af2c8', stats: { spd: 9, jmp: 16, mass: 1.5, swim: 1.2, climb: 1 }, atk: 'headbutt', sp: 'superhop', voice: ['blorp', 200], desc: 'Bouncy, sticky, climbs walls, absorbs dignity.' },
@@ -93,7 +103,7 @@ H.SPECIALS = {
   pounce: 'Pounce', superhop: 'Super Hop', roar: 'Roar', stomp: 'Ground Pound', howl: 'Howl', chestpound: 'Chest Pound',
   deathroll: 'Death Roll', spray: 'Trunk Blast', charge: 'Charge', dive: 'Dive Bomb', hoot: 'Slow-Mo Hoot', necksmash: 'Neck Swing',
   spit: 'Spit', laser: 'Eye Lasers', rocket: 'Rocket', teleport: 'Blink', firebreath: 'Fire Breath', rainbowdash: 'Rainbow Dash',
-  blackhole: 'Black Hole', eggbomb: 'Egg Bomb',
+  blackhole: 'Black Hole', eggbomb: 'Egg Bomb', rampage: 'Rampage', skyjump: 'Sky Jump',
 };
 
 // ---------------- VEHICLES ----------------
@@ -123,6 +133,20 @@ H.VEHICLES = [
   { id: 'heli', name: 'Whirlybird Chopper', type: 'heli', price: 55000, spd: 50, acc: 16, turn: 1.6, col: '#2a3a5a', size: [2.4, 2.4, 7.0] },
   { id: 'plane', name: 'Prop Plane', type: 'plane', price: 70000, spd: 80, acc: 18, turn: 1.3, col: '#f2f2f2', size: [9, 2.2, 7] },
   { id: 'jet', name: 'Stratos Jet', type: 'plane', price: 150000, spd: 150, acc: 30, turn: 1.4, col: '#8a96a8', size: [10, 2.6, 12] },
+  // From Scentline
+  { id: 'hatch', name: 'Hatchback', type: 'car', price: 2500, spd: 32, acc: 15, turn: 2.0, col: '#c84a3a', size: [1.75, 1.5, 3.9] },
+  { id: 'suv', name: 'SUV', type: 'car', price: 8000, spd: 33, acc: 14, turn: 1.8, col: '#3a4a5a', size: [2.0, 1.85, 4.8] },
+  { id: 'ambulance', name: 'Ambulance', type: 'truck', price: 9000, spd: 30, acc: 11, turn: 1.6, col: '#f2f2f2', size: [2.1, 2.5, 5.6] },
+  { id: 'van', name: 'Van', type: 'truck', price: 5000, spd: 28, acc: 11, turn: 1.6, col: '#d8d0b8', size: [2.0, 2.35, 5.0] },
+  { id: 'delivery', name: 'Delivery Truck', type: 'truck', price: 11000, spd: 26, acc: 8, turn: 1.4, col: '#e8b81a', size: [2.35, 3.2, 7.0] },
+  { id: 'sportbike', name: 'Sport Bike', type: 'moto', price: 14000, spd: 64, acc: 32, turn: 2.6, col: '#2a2a30', size: [0.8, 1.1, 2.1] },
+  { id: 'cruiser', name: 'Cruiser', type: 'moto', price: 9000, spd: 42, acc: 17, turn: 2.2, col: '#5a1a1a', size: [0.9, 1.25, 2.6] },
+  { id: 'scooter', name: 'Scooter', type: 'moto', price: 1500, spd: 26, acc: 13, turn: 2.6, col: '#7ad2ff', size: [0.7, 1.2, 1.8] },
+  { id: 'policebike', name: 'Police Bike', type: 'moto', price: 16000, spd: 56, acc: 26, turn: 2.5, col: '#1a1f2e', size: [0.85, 1.3, 2.2] },
+  { id: 'offroad', name: 'Off-roader', type: 'car', price: 12000, spd: 36, acc: 16, turn: 1.9, col: '#6a7a3a', size: [1.95, 1.95, 4.0], bigwheels: 1 },
+  { id: 'tank', name: 'Battle Tank', type: 'tank', price: 90000, spd: 17, acc: 8, turn: 1.0, col: '#5a6a3a', size: [3.4, 2.7, 7.2] },
+  { id: 'fighter', name: 'Fighter Jet', type: 'plane', price: 120000, spd: 130, acc: 30, turn: 1.6, col: '#7a8494', size: [9, 3, 9.5], guns: 1 },
+  { id: 'starship', name: 'Starship', type: 'heli', price: 15000, spd: 120, acc: 30, turn: 2.0, col: '#c8d0e0', size: [8, 2.4, 10], starship: 1 },
   { id: 'saucer', name: 'Lunar Saucer', type: 'heli', price: -1, secret: 'Recover all 5 parts at the desert crash site.', spd: 90, acc: 40, turn: 2.6, col: '#c8d0dc', size: [6, 1.6, 6], saucer: 1 },
 ];
 H.VEHICLE = {}; H.VEHICLES.forEach(v => (H.VEHICLE[v.id] = v));
@@ -331,6 +355,12 @@ H.ACHIEVEMENTS = [
   ['rich', 'Moneybags', 'Hold 100,000 coins at once', 'coinsPeak', 100000, 5000], ['lick50', 'Tongue Twister', 'Grab 50 things with your tongue', 'grabs', 50, 800],
   ['roar25', 'Loud Neighbor', 'Use special abilities 25 times', 'specials', 25, 600], ['heat5', 'Most Wanted', 'Reach 5-star Animal Control heat', 'maxHeat', 5, 2000],
   ['emote20', 'Show-Off', 'Emote 20 times', 'emotes', 20, 400], ['night', 'Night Owl', 'Play through a full day-night cycle', 'days', 1, 500],
+  ['sl_hunt', 'Hunter', 'Hunt 6 wild animals', 'kills', 6, 500], ['sl_jack', 'Grand Theft Kibble', 'Hijack 3 traffic cars', 'hijacks', 3, 500],
+  ['sl_pet', 'Good Animal', 'Get petted 5 times', 'pets', 5, 400], ['sl_esc', 'Slippery', 'Shake off the law 2 times', 'escaped', 2, 700],
+  ['sl_paw', 'Paw Collector', 'Find 8 paw tokens', 'paws', 8, 600], ['sl_rings', 'Water Dog', 'Swim through all 6 lake rings', 'rings', 6, 600],
+  ['sl_boss', 'Kingslayer', 'Defeat the Bramble King', 'bossKills', 1, 3000], ['sl_wreck', 'Demolition', 'Wreck 3 vehicles', 'vehiclesDestroyed', 3, 600],
+  ['sl_heist', 'Bank Job', 'Rob a bank vault', 'heists', 1, 1500], ['sl_lvl', 'Seasoned', 'Reach level 10', 'level', 10, 2500],
+  ['sl_space', 'Star Hopper', 'Land on 3 different planets', 'planets', 3, 3000], ['sl_laps', 'Speed Demon', 'Win a race at the raceway', 'raceWins', 1, 1000],
   ['summit', 'Peak Performer', 'Stand on top of Grumblepeak', 'summit', 1, 1500], ['event5', 'Weirdness Magnet', 'Witness 5 world events', 'events', 5, 2000],
 ].map(([id, name, desc, stat, goal, reward, item]) => ({ id, name, desc, stat, goal, reward, item }));
 

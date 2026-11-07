@@ -33,10 +33,19 @@ When the game runs as a claude.ai artifact it uses the platform's live room inst
 
 Three.js loads from jsDelivr, with `vendor/three.min.js` (MIT, see `vendor/THREE-LICENSE`) as an offline fallback.
 
-## Two worlds, everything free
+## Hoofquake + Scentline, one game, everything free
 
-- **Everything is free.** Every animal (secret ones included), vehicle, cosmetic, property, piece of furniture, gadget, upgrade and paint job costs nothing and is unlocked from the start. Coins still pay out, there's just nothing you need them for.
-- **Scentline** is a second world in `scentline/`: a separate open-world animal game (dog, cat, goat, boar, gorilla, bear, crocodile, pitbull, eagle) with its own towns, cars, aircraft, guns, bases and banks. Get there from the main menu (**Travel to Scentline**) or the glowing portal in Bleatsburg's city plaza; its title and pause screens have a button back. In Scentline every animal, rare coat and weapon is unlocked and every shop item, vehicle, upgrade, base move, repair and galaxy trip is free. Scentline keeps its own save (on the device) and its own online play.
+Scentline's content and systems are rebuilt inside Hoofquake's engine, so it's one world, one save and one roster:
+
+- **Scentline's animals** join the roster (Boar, Pit Bull), and every animal gets Scentline's moves: a heavy attack (**V**: pounce, charge, ground pound or swoop), an animal sound (**B**: bark, meow, growl… scares people, freezes small prey, cats and rabbits charm people into petting you) and, for animals with a nose, **Sniff** (hold **Z**) to see scent trails to collectibles, prey and buried treasure.
+- **RPG layer:** health and stamina, XP and levels, and a skill point per level for six stats (speed, strength, stamina, jumping, swimming, durability) kept per animal. You can be knocked out and wake up at home. God mode is in Animals → Stats.
+- **Hunting:** wildlife has health. Knock animals out to hunt them, then Interact to eat them and heal. Wolves, lake gators, sand beasts, drakes, ash beasts and the **Bramble King** boss in the Northern Rocks fight back. Animals → Bestiary tracks what you've hunted.
+- **Arsenal:** Scentline's 29 guns join Hoofquake's gadgets (34 weapons in all: pistols, SMGs, snipers, miniguns, railguns, chain-lightning arc casters, gravity cannons, rocket and meteor launchers…), plus its 16 pieces of gear (armour, shields, regeneration, moon boots…). Pick a loadout of 6 in Shop → Arsenal; **X** cycles it.
+- **Wanted level:** crimes people see raise your stars. Police chase you on foot, then police cars and bikes, then SWAT and the army, who shoot back. Lose them to drop your stars.
+- **Vehicles:** Scentline's hatchback, SUV, van, ambulance, delivery truck, sport bike, cruiser, scooter, police bike, off-roader, **battle tank** (turret cannon), **fighter jet** (guns and missiles) and **starship** join the garage. Scentline's car upgrades (armour, grip tires, nitro, ram bumper, mounted guns, rocket pods, underglow) work on every car. Interact next to any traffic car to **hijack** it.
+- **Places:** **Dustwater** (desert frontier town), **Frostpeak** ski village, the **Scentline Raceway** (lap races against three rival drivers), **Fort Grizzle** military base (tanks, fighter jet, starship), two **banks** whose vaults you can hack, 16 **paw tokens**, 6 **lake rings** to swim through, and the Northern Rocks.
+- **Space:** fly the starship and press Special (**Q**) for the star map: **Selene, Ares, Zephyria, Mythos, Cyberia and Pyros**, each with its own terrain, starport, settlement, wildlife and signature weapon. Galaxy fame follows your highest wanted level.
+- **Everything is free:** every animal, vehicle, weapon, gear item, cosmetic, property, furniture item and upgrade is unlocked from the start.
 
 ## What's in it
 
@@ -44,7 +53,7 @@ Three.js loads from jsDelivr, with `vendor/three.min.js` (MIT, see `vendor/THREE
 | --- | --- |
 | World | 3.2 km × 3.2 km map: Bleatsburg City, suburbs, a mansion plateau, mall, industrial yard, airport, theme park (rideable coaster and drop tower), sports complex, golf course, farm, village, lake, river with bridges, beach and pier, lighthouse, island, desert with stunt park, jungle temple, pine forest, mountains with an observatory, a floating Cloud Garden |
 | Secrets | Hidden laboratory (keycard chain), Grumble Cave, sunken shipwreck, UFO crash site, the Mossback cryptid quest, a dino egg that hatches at night, 14 discoverable secret places |
-| Animals | 41 playable animals (36 buyable, 5 secret), each with its own model, voice, stats, movement (fly, glide, climb, dive, double jump, dig) and special ability |
+| Animals | 43 playable animals (Hoofquake's 41 plus Scentline's Boar and Pit Bull), each with its own model, voice, stats, movement (fly, glide, climb, dive, double jump, dig) and special ability |
 | Vehicles | 25 vehicles: cars, supercars, trucks, bus, fire truck, motorbike, bike, skateboard, go-kart, tractor, digger, monster truck, boats, jet ski, submarine, hovercraft, helicopter, planes, a secret saucer. Buy, summon, paint and upgrade (engine, handling, nitro) |
 | Missions | 261 generated missions across 22 types (races on foot, road, water and air, deliveries, taxi, chaos, human bowling, scares, stunts, flips, football, basketball, 9-hole golf, bowling, fishing, sheep herding, harvest, cooking, treasure hunts, rooftop parkour, skate, obstacle course, star hunts, secret quests) plus three daily challenges |
 | Cosmetics | 648 items in 13 slots (fur, patterns, eyes, hats, face, neck, outfits, back, feet, tail, trails, auras, emotes) across Common → Mythical and Secret rarities, with try-on preview and five saved outfits per animal |
@@ -75,6 +84,9 @@ When the game runs as a claude.ai artifact it saves to the player's private `db`
 | `js/state.js` | Economy, stats, achievements, collectibles, interactions, world events, saving |
 | `js/missions.js` | Mission generation and runtime, fishing |
 | `js/ui.js` | Menus, shops, customization, garage, map, HUD, touch controls |
+| `js/scent.js` | Scentline layer: health, stamina, XP and stats, hunting and bestiary, heavy attacks, sounds, sniffing, hijacking, wanted level and police |
+| `js/arsenal.js` | Scentline's guns and gear, hitscan and rockets, vehicle weapon upgrades, tank, fighter jet, starship |
+| `js/places.js` | Dustwater, Frostpeak, raceway and rivals, Fort Grizzle, banks and heists, paw tokens, lake rings, Bramble King, planets and the star map |
 | `js/mayhem.js` | Gadgets, vehicle damage, air traffic, riding, talking, tree shaking |
 | `js/net.js` | Online multiplayer: server and claude.ai-room transports, remote players, chat, name tags |
 | `js/main.js` | Boot, input, game loop, split-screen |

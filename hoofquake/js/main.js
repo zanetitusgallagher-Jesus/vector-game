@@ -3,9 +3,9 @@
 (function () {
   const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   H.settings = { volume: 0.6, shadows: !isTouch, pixelRatio: isTouch ? 0.75 : 1, viewDist: isTouch ? 600 : 900, fov: 70, traffic: isTouch ? 14 : 24, touch: isTouch, sens: 1, invertY: false, animalControl: true, events: true, timeSpeed: 1 };
-  H.ACTION_LABEL = { move: 'Move', jump: 'Jump / fly up', sprint: 'Sprint / boost', attack: 'Headbutt / attack', grab: 'Lick / grab / throw', special: 'Special ability', interact: 'Interact / enter vehicle', ragdoll: 'Ragdoll', descend: 'Dive / fly down', emote1: 'Emote 1', emote2: 'Emote 2', emote3: 'Emote 3', emote4: 'Emote 4', horn: 'Horn', gadget: 'Gadget (gun) on/off', map: 'Map', missions: 'Missions', customize: 'Customize', camLeft: 'Camera left', camRight: 'Camera right' };
+  H.ACTION_LABEL = { move: 'Move', jump: 'Jump / fly up', sprint: 'Sprint / boost', attack: 'Headbutt / attack', grab: 'Lick / grab / throw', special: 'Special ability', interact: 'Interact / enter vehicle', ragdoll: 'Ragdoll', descend: 'Dive / fly down', emote1: 'Emote 1', emote2: 'Emote 2', emote3: 'Emote 3', emote4: 'Emote 4', horn: 'Horn', gadget: 'Weapon (cycle loadout)', heavy: 'Heavy attack', sound: 'Animal sound', sniff: 'Sniff (hold)', map: 'Map', missions: 'Missions', customize: 'Customize', camLeft: 'Camera left', camRight: 'Camera right' };
   const DEFAULT_KEYS = [
-    { jump: ['Space'], sprint: ['ShiftLeft'], attack: ['KeyF'], grab: ['KeyG'], special: ['KeyQ'], interact: ['KeyE'], ragdoll: ['KeyR'], descend: ['KeyC', 'ControlLeft'], emote1: ['Digit1'], emote2: ['Digit2'], emote3: ['Digit3'], emote4: ['Digit4'], horn: ['KeyH'], gadget: ['KeyX'], map: ['KeyM'], missions: ['KeyJ'], customize: ['KeyK'], up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'] },
+    { jump: ['Space'], sprint: ['ShiftLeft'], attack: ['KeyF'], grab: ['KeyG'], special: ['KeyQ'], interact: ['KeyE'], ragdoll: ['KeyR'], descend: ['KeyC', 'ControlLeft'], emote1: ['Digit1'], emote2: ['Digit2'], emote3: ['Digit3'], emote4: ['Digit4'], horn: ['KeyH'], gadget: ['KeyX'], heavy: ['KeyV'], sound: ['KeyB'], sniff: ['KeyZ'], map: ['KeyM'], missions: ['KeyJ'], customize: ['KeyK'], up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'] },
     { jump: ['Slash'], sprint: ['ShiftRight'], attack: ['Period'], grab: ['Comma'], special: ['Semicolon'], interact: ['Quote'], ragdoll: ['BracketRight'], descend: ['ControlRight'], up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], camLeft: ['BracketLeft'], camRight: ['Backslash'] },
   ];
   H.resetKeys = () => { H.keys = JSON.parse(JSON.stringify(DEFAULT_KEYS)); H.saveSettings(); };
@@ -55,6 +55,7 @@
     inp.special = hit(i, 'special') || tp('special');
     inp.interact = hit(i, 'interact') || tp('interact');
     inp.ragdoll = hit(i, 'ragdoll') || tp('ragdoll');
+    inp.heavy = hit(i, 'heavy') || tp('heavy'); inp.sound = hit(i, 'sound') || tp('sound'); inp.sniff = has(i, 'sniff') || tb('sniff');
     inp.horn = hit(i, 'horn'); inp.gadget = hit(i, 'gadget') || tp('gadget'); inp.fireHeld = (i === 0 && mouse.locked && mouse.down0) || has(i, 'attack') || tb('attack');
     inp.emoteIdx = -1; for (let k = 0; k < 4; k++) if (hit(i, 'emote' + (k + 1))) inp.emoteIdx = k; if (tp('emote')) inp.emoteIdx = Math.floor(Math.random() * Math.max(1, p.emotes.length));
     // camera
@@ -93,11 +94,11 @@
       loading('Raising mountains and digging rivers…', 15); await wait(); H.buildTerrain(scene);
       loading('Paving roads and building bridges…', 30); await wait(); H.buildRoads(scene);
       loading('Building Bleatsburg, farms, an airport and one suspicious shed…', 45); await wait(); H.buildWorld(scene);
-      loading('Writing 250+ missions…', 70); await wait(); H.generateMissions(); H.initBeacons();
+      loading('Writing 250+ missions…', 70); await wait(); H.generateMissions(); H.addRacewayMissions(); H.initBeacons();
       loading('Waking up the townsfolk…', 80); await wait();
       H.players.push(new H.Player(0)); H.players[0].setAnimal('goat'); placeAtSpawn(H.players[0], false);
       for (const s of H.propSpawns) H.spawnProp(s.type, s.x, null, s.z, { interior: s.interior, ry: s.ry });
-      H.NPCs.init(); H.spawnWorldVehicles(); H.initAir(); H.buildPortal(); H.initTraffic(H.settings.traffic);
+      H.NPCs.init(); H.spawnWorldVehicles(); H.initAir(); H.initTraffic(H.settings.traffic);
       loading('Looking for your save…', 92); await wait();
       const cloud = await H.Save.init(); let saved = null; if (cloud) saved = await H.Save.load();
       if (saved) { H.applyState(saved); H.hasSave = true; if (saved.settings) Object.assign(H.settings, saved.settings); if (saved.keys) H.keys = saved.keys; }
@@ -159,10 +160,12 @@
       for (let i = 0; i < H.players.length; i++) {
         const inp = readInput(i, dt);
         if ((H.fishing && i === 0) || (H.cookingActive && i === 0)) { inp.mx = inp.mz = 0; inp.jumpPressed = inp.attack = inp.grab = inp.special = inp.interact = false; inp.jump = false; }
+        if (i === 0) H.lastInp = inp;
         H.players[i].update(dt, inp);
       }
       const sdt = H.slowmo > 0 ? dt * 0.35 : dt;
       H.missions.update(dt); H.updateProps(sdt); H.NPCs.update(dt); H.updateTraffic(sdt); H.updateVehicles(sdt); H.updateProjectiles(sdt); H.updateShots(sdt); H.updateBurning(sdt); H.updateAir(sdt);
+      H.updateVitals(dt, H.lastInp); H.updatePets(dt); H.updateWanted(dt); H.updateCopCars(sdt); H.updateTracers(dt); H.updateRockets(sdt); H.updateVehicleExtras(); H.updateHeist(dt); H.updateRivals(sdt);
       H.updateCombo(dt); H.updateHeat(dt); if (H.settings.events) H.updateEvents(dt); H.updateCollectibles(dt, t);
       for (const a of H.anims) a(dt, t);
       secretT += dt; if (secretT > 0.5) { secretT = 0; H.checkSecrets(); }
@@ -174,7 +177,7 @@
     H.fx.update(dt);
     const cam0 = H.cameras[0];
     for (let i = 0; i < H.players.length; i++) H.players[i].updateCamera(dt, H.cameras[i]);
-    H.Sky.update(H.started && !H.paused ? dt : 0, cam0.position, !!p1.interior);
+    H.Sky.update(H.started && !H.paused ? dt : 0, cam0.position, !!p1.interior); H.updatePlanetEnv();
     H.updateBeacons(); if (H.started) H.Net.update(dt);
     // render
     const W = innerWidth, Hh = innerHeight;

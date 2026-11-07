@@ -468,7 +468,7 @@
     const r = H.rng(555);
     for (let i = 0; i < 26000; i++) {
       const x = r.range(-1560, 1560), z = r.range(-1560, 980); const h = gy(x, z); if (h < 1.5 || H.nearRoad(x, z)) continue;
-      let flat = false; for (const k of ['city', 'mall', 'industrial', 'suburbs', 'mansions', 'themepark', 'sports', 'golf', 'farm', 'village', 'skatepark', 'stuntpark', 'lake']) { const s = S[k]; if (Math.hypot(x - s.x, z - s.z) < s.r + 15 || (k === 'city' && Math.abs(x) < 320 && Math.abs(z) < 320)) { flat = true; break; } }
+      let flat = false; for (const k of ['city', 'mall', 'industrial', 'suburbs', 'mansions', 'themepark', 'sports', 'golf', 'farm', 'village', 'skatepark', 'stuntpark', 'lake', 'raceway', 'military', 'frostpeak', 'dustwater', 'bank']) { const s = S[k]; if (Math.hypot(x - s.x, z - s.z) < s.r + 15 || (k === 'city' && Math.abs(x) < 320 && Math.abs(z) < 320)) { flat = true; break; } }
       if (flat || (x > 680 && x < 1360 && z > -260 && z < 140)) continue;
       const fo = H.inForest(x, z), ju = H.inJungle(x, z), de = H.inDesert(x, z), mo = H.mountainMask(z);
       const v = r();
@@ -591,6 +591,7 @@
     H.Sky.nightLights.push(wallMat, glowMat);
     M = { wall: new H.Merge(), solid: new H.Merge(), glow: new H.Merge() };
     city(); suburbs(); mansions(); farm(); village(); industrial(); mall(); airport(); themepark(); sports(); golf(); lake(); beach(); forest(); jungle(); mountains(); desert(); skatepark(); cloudGarden(); riverExtras();
+    H.buildPlaces && H.buildPlaces({ M, building, house, fence, lamp, sign, tree, gable });
     properties(); secretInteriors(); scatter(); buildTrees(); collectibles(); secretZones();
     const solidMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     const a = M.wall.build(wallMat), b = M.solid.build(solidMat), c = M.glow.build(glowMat);
