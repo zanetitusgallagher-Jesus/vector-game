@@ -125,7 +125,7 @@
       this.smash(p, fx, fz);
       if (t === 'plane' || t === 'heli') { const sky = this.pos.y > 600; if (sky) this.pos.y = 600; }
       this.place();
-      H.Audio.engine(true, Math.min(1, Math.abs(this.spd) / max), t);
+      if (!this.ai) H.Audio.engine(true, Math.min(1, Math.abs(this.spd) / max), t);
       if (inp.horn) H.Audio.sfx('horn');
     }
     crash(p, imp) { if (this.isAir && imp > 22) { this.damage(9999, p); return; } this.damage(imp * 1.4, p); if (this.dead) return; H.Audio.sfx('boom', 0.6); H.fx.burst(this.pos.x, this.pos.y + 1, this.pos.z, new THREE.Color('#5a5a5a'), 20, 8, 0.6); this.spd = 0; this.vy = 0; this.pitch = 0; this.roll = 0; if (p) this.exit(p, Math.min(40, imp * 0.8)); H.stat('crashes', 1); }

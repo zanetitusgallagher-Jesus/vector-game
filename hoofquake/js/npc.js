@@ -53,7 +53,7 @@
         this.angry -= dt; const c = this.chase; const dx = c.pos.x - this.pos.x, dz = c.pos.z - this.pos.z, d = Math.hypot(dx, dz) || 1;
         this.yaw = H.angLerp(this.yaw, Math.atan2(dx, dz), dt * 6); const sp = (this.def ? this.def.stats.spd : 8) * 1.15;
         this.pos.x += Math.sin(this.yaw) * sp * dt; this.pos.z += Math.cos(this.yaw) * sp * dt; H.collideStatic(this.pos, this.radius, this.height, this.interior); this.pos.y = H.groundAt(this.pos.x, this.pos.z, this.pos.y + 1, this.interior);
-        if (d < this.radius + 1.6 && !c.ragdoll && !c.vehicle && (this.atkT || 0) <= 0) { this.atkT = 1.5; c.knock(dx / d * 18, 12, dz / d * 18); H.Audio.voice(this.def.voice, 0.9); H.floatText('RAWR!', this.pos, { cls: 'big' }); }
+        if (d < this.radius + 1.6 && !c.ragdoll && !c.vehicle && (this.atkT || 0) <= 0) { this.atkT = 1.5; c.knock(dx / d * 10, 8, dz / d * 10, H.speciesOf ? H.speciesOf(this).dmg || 15 : 15); H.Audio.voice(this.def.voice, 0.9); H.floatText('RAWR!', this.pos, { cls: 'big' }); }
         this.atkT = (this.atkT || 0) - dt; if (d > 120) this.angry = 0;
         this.model.position.copy(this.pos); this.model.rotation.set(0, this.yaw, 0); this.phase += dt * sp * 2.2; const s = Math.sin(this.phase); this.parts.legs.forEach((l, i) => (l.rotation.x = s * ((i === 0 || i === 3) ? 0.9 : -0.9))); return;
       }
@@ -109,12 +109,13 @@
       this.model.position.copy(this.pos);
       if (r.t > 2.5 && this.vel.lengthSq() < 2) {
         this.ragdoll = null; P.rig.rotation.set(0, 0, 0); if (P.arms) P.arms.forEach(a => (a.rotation.z = 0)); this.pos.y = H.groundAt(this.pos.x, this.pos.z, this.pos.y + 2, this.interior);
-        if (this.isHuman && Math.random() < 0.7) this.say('hit'); this.state = this.type === 'officer' ? 'chase' : 'flee'; this.t = 3;
+        if (this.dead) return; if (this.isHuman && Math.random() < 0.7) this.say('hit'); this.state = this.type === 'officer' || this.type === 'swat' ? 'chase' : 'flee'; this.t = 3;
       }
       if (this.pos.y < -100) { this.pos.copy(this.home); this.pos.y = H.groundAt(this.home.x, this.home.z, 999); this.ragdoll = null; }
     }
   }
 
+  H.NPCClass = NPC; H.ANIMAL_NPC = ANIMAL_NPC; H.HUMAN_TYPES = HUMAN_TYPES; H.NPC_LINES = LINES;
   H.NPCs = {
     list: [], grid: new H.Grid(24),
     init() { for (const z of H.npcZones) for (let i = 0; i < z.count; i++) this.list.push(new NPC(z, i)); },
@@ -205,9 +206,11 @@
   H.heatLevel = 0; H.heatT = 0;
   H.heat = function (amt) {
     if (H.settings && !H.settings.animalControl) return;
-    const before = Math.floor(H.heatLevel); H.heatLevel = Math.min(5, H.heatLevel + amt); H.heatT = 0; const after = Math.floor(H.heatLevel);
-    H.stat('maxHeat', after, true);
-    if (after > before && after >= 2) { const p = H.players[0]; if (p.interior) return; const count = after - 1; for (let i = 0; i < count; i++) { const a = Math.random() * 6.28; const zone = { x: p.pos.x + Math.cos(a) * 60, z: p.pos.z + Math.sin(a) * 60, r: 5, type: 'officer', temp: 1 }; const n = H.NPCs.add(zone); n.materialize(); n.state = 'chase'; n.chase = p; } H.toast('🚨 Animal Control is after you! (' + after + '★)'); H.Audio.sfx('horn'); }
+    const p = H.players[0]; if (!p || p.dead) return;
+    // crimes only count when somebody sees them (or you're already wanted)
+    if (H.heatLevel < 1) { let seen = Math.abs(p.pos.x) < 300 && Math.abs(p.pos.z) < 300; if (!seen) for (const n of H.NPCs.near(p.pos.x, p.pos.z, 60)) if (n.isHuman && !n.dead) { seen = true; break; } if (!seen) return; }
+    if (H.hasGear) { if (H.hasGear('stealth')) amt *= 0.45; if (H.hasGear('veil')) amt *= 0.5; }
+    H.heatLevel = Math.min(5, H.heatLevel + amt); H.heatT = 0; H.stat('maxHeat', Math.floor(H.heatLevel), true);
   };
   H.updateHeat = function (dt) { H.heatT += dt; if (H.heatT > 20 && H.heatLevel > 0) { H.heatLevel = Math.max(0, H.heatLevel - dt * 0.08); } };
 })();

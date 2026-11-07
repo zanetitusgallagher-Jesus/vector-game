@@ -53,6 +53,7 @@
       $('#clock').textContent = H.Sky.clock(); $('#weather').textContent = { clear: '☀️', cloudy: '☁️', rain: '🌧️', storm: '⛈️', fog: '🌫️', snow: '🌨️' }[H.Sky.weather] || '';
       const stars = Math.floor(H.heatLevel); $('#heat').textContent = stars ? '★'.repeat(stars) + '☆'.repeat(5 - stars) : ''; $('#heat').hidden = !stars;
       const cd = p.cd.sp, mx = p.cd.spMax || 1; $('#spBtnFill').style.transform = `scaleY(${cd > 0 ? cd / mx : 0})`; $('#spName').textContent = H.SPECIALS[p.def.sp] || '';
+      if (p.hp !== undefined && H.maxHp) { const mh = H.maxHp(p), ms = H.maxSt(p), r = H.rpg(); $('#vitals .hp i').style.width = Math.max(0, p.hp / mh * 100) + '%'; $('#vitals .hp span').textContent = Math.ceil(Math.max(0, p.hp)) + ' / ' + mh + (r.god ? ' · ∞' : ''); $('#vitals .st i').style.width = Math.max(0, p.st / ms * 100) + '%'; $('#lvl').textContent = 'Lv ' + r.lvl + (r.sp ? ' · ' + r.sp + ' pt' : ''); $('#vitals .xp i').style.width = (r.xp / H.xpNeed(r.lvl) * 100) + '%'; }
       $('#animalName').textContent = p.def.name + (p.gadget ? ' · 🔫 ' + H.GADGET[p.gadget].name : '') + (p.mount ? ' · riding' : '');
       // interaction prompt
       const c = p.vehicle ? { label: 'Exit ' + p.vehicle.def.name } : p.nearestInteract();
@@ -120,7 +121,20 @@
     },
     // ------------------------------------------------------------------ animals
     openAnimals() {
-      this.show('Animals', [['owned', 'Your animals'], ['all', 'All animals']], 'owned', (t, b) => {
+      this.show('Animals', [['owned', 'Your animals'], ['all', 'All animals'], ['stats', 'Stats & level'], ['bestiary', 'Bestiary']], 'owned', (t, b) => {
+        if (t === 'stats') {
+          const p = H.players[0], r = H.rpg(), u = H.ups(p);
+          b.appendChild(el('p', 'lead', `Level ${r.lvl} · ${r.xp} / ${H.xpNeed(r.lvl)} XP · ${r.sp} skill point${r.sp === 1 ? '' : 's'} to spend. Stats are kept per animal; levels are shared. Earn XP by hunting, fighting, missions, collectibles and exploring.`));
+          for (const [k, name] of Object.entries(H.STAT_NAMES)) { const row = el('div', 'upRow', `<span>${name} for the ${esc(p.def.name)}</span><span class="pips">${'●'.repeat(Math.min(10, u[k]))}${u[k] > 10 ? '+' + (u[k] - 10) : ''}</span>`); const bt = el('button', 'btn sm', '+1'); bt.disabled = !r.sp; bt.onclick = () => { if (!r.sp) return; r.sp--; u[k]++; H.dirty(true); H.Audio.sfx('buy'); this.refresh(); }; row.appendChild(bt); b.appendChild(row); }
+          b.appendChild(el('p', 'muted', `Health ${H.maxHp(p)} · Stamina ${H.maxSt(p)} · Heavy attack: ${esc({ leap: 'Pounce', dash: 'Charge', slam: 'Ground pound', swoop: 'Swoop' }[H.heavyOf(p.def)])} (V) · Sound (B)${H.canSniff(p.def) ? ' · Sniff (hold Z)' : ''}`));
+          const g = el('label', 'set', '<span>Can\'t be knocked out (god mode)</span>'); const gi = el('input'); gi.type = 'checkbox'; gi.id = 'godMode'; gi.checked = !!r.god; gi.onchange = () => { r.god = gi.checked; H.dirty(); }; g.appendChild(gi); b.appendChild(g);
+          return;
+        }
+        if (t === 'bestiary') {
+          const be = H.rpg().bestiary; const g = el('div', 'grid items');
+          for (const [k, s] of Object.entries(H.SPECIES)) { if (['human', 'officer', 'swat', 'soldier', 'alien', 'robot'].includes(k)) continue; const n = be[k] || 0; g.appendChild(el('div', 'item' + (n ? ' owned' : ''), `<b>${n ? esc(s.name) : '???'}</b><small>${n ? n + ' hunted · ' : ''}${s.hp} HP · ${s.xp} XP${s.fighter ? ' · fights back' : ''}${s.boss ? ' · BOSS' : ''}</small>`)); }
+          b.appendChild(el('p', 'muted', 'Knock wild animals out to hunt them; walk up and Interact to eat them and heal. Wolves, gators, sand beasts, drakes and the Bramble King fight back.')); b.appendChild(g); return;
+        }
         const grid = el('div', 'grid cards');
         const list = H.ANIMALS.filter(a => t === 'all' || H.state.animals[a.id]);
         for (const a of list) {
@@ -207,7 +221,7 @@
     },
     // ------------------------------------------------------------------ shop
     openShop(kind, shop, focusProp) {
-      const tabs = [['cosmetics', 'Cosmetics'], ['animals', 'Animals'], ['vehicles', 'Vehicles'], ['furniture', 'Furniture'], ['properties', 'Real Estate'], ['gadgets', 'Gadgets'], ['fish', 'Sell Fish']];
+      const tabs = [['cosmetics', 'Cosmetics'], ['animals', 'Animals'], ['vehicles', 'Vehicles'], ['furniture', 'Furniture'], ['properties', 'Real Estate'], ['gadgets', 'Arsenal'], ['fish', 'Sell Fish']];
       if (kind === 'garage') return this.openGarage();
       if (kind === 'animals') return this.openAnimals();
       this.show(shop ? shop.name : 'Shop', tabs, kind, (t, b) => {
@@ -254,13 +268,14 @@
           b.appendChild(g);
         }
         if (t === 'gadgets') {
-          b.appendChild(el('p', 'muted', `Press ${H.keyName('gadget')} (or GUN on touch) to take out a gadget, aim with the camera, and Attack to fire. Shoot people, wildlife, traffic, parked cars and the planes overhead.`));
-          const g = el('div', 'grid cards');
-          for (const gd of H.GADGETS) { const own = (H.state.gadgets || {})[gd.id]; const c = el('div', 'card'); c.innerHTML = `<h4>${esc(gd.name)}</h4><p>${esc(gd.desc)}</p>`; const act = el('div', 'act');
-            if (own) { const bt = el('button', 'btn', 'Equip'); bt.onclick = () => { const p = H.players[0]; p.gadget = gd.id; document.body.classList.add('aiming'); this.close(); this.toast('🔫 ' + gd.name + ' equipped'); }; act.appendChild(bt); }
-            else { const bt = el('button', 'btn buy', 'Buy ' + coinTag(gd.price)); bt.onclick = () => { if (H.spend(gd.price)) { H.state.gadgets[gd.id] = 1; H.dirty(true); this.refresh(); } }; act.appendChild(bt); }
-            c.appendChild(act); g.appendChild(c); }
+          const lo = H.state.loadout = H.state.loadout || [];
+          b.appendChild(el('p', 'muted', `Everything is free. Pick up to 6 weapons for your loadout — ${H.keyName('gadget')} cycles through them, the camera aims, Attack fires. Gear works passively once switched on.`));
+          b.appendChild(el('h3', '', `Weapons (${lo.length}/6 in loadout)`)); const g = el('div', 'grid items');
+          for (const w of H.GADGETS) { const on = lo.includes(w.id); const c = el('div', 'item' + (on ? ' on owned' : '')); c.innerHTML = `<b>${esc(w.name)}</b><small>${esc(w.desc)}</small><small>${on ? 'In loadout ✓' : 'Tap to add'}</small>`; c.onclick = () => { const i = lo.indexOf(w.id); if (i >= 0) lo.splice(i, 1); else { lo.push(w.id); if (lo.length > 6) lo.shift(); } H.dirty(); H.Audio.sfx('click'); this.refresh(); }; g.appendChild(c); }
           b.appendChild(g);
+          b.appendChild(el('h3', '', 'Gear')); const gg = el('div', 'grid items'); const on = H.state.gearOn = H.state.gearOn || {};
+          for (const ge of H.GEAR) { const c = el('div', 'item' + (on[ge.id] ? ' on owned' : '')); c.innerHTML = `<b>${esc(ge.name)}</b><small>${esc(ge.desc)}</small><small>${on[ge.id] ? 'On ✓' : 'Off — tap to wear'}</small>`; c.onclick = () => { on[ge.id] = !on[ge.id]; if (!on[ge.id]) delete on[ge.id]; H.dirty(); H.Audio.sfx('click'); this.refresh(); }; gg.appendChild(c); }
+          b.appendChild(gg);
         }
         if (t === 'fish') {
           const caught = Object.entries(H.state.fish); if (!caught.length) b.appendChild(el('p', 'muted', 'You haven\'t caught anything yet. Fishing spots: Old Pier, Lake Lumpy Dock, Riverbank, Lighthouse Rocks, Jungle River, Coconut Key Dock.'));
@@ -291,7 +306,7 @@
         }
         if (t === 'collect') {
           const g = el('div', 'grid stat');
-          [['🦆 Rubber ducks', d('ducks'), 60], ['🧙 Garden gnomes', d('gnomes'), 25], ['🏆 Golden Goat Statues', d('statues'), 12], ['📦 Treasure chests', d('chests'), 40], ['🎣 Fish species', d('fishSpecies'), 20], ['🛸 UFO parts', Object.keys(H.state.found).filter(k => k.startsWith('ufopart')).length, 5]].forEach(([k, v, m]) => g.appendChild(el('div', 'tile', `<small>${k}</small><b>${v} / ${m}</b><div class="bar"><i style="width:${v / m * 100}%"></i></div>`)));
+          [['🐾 Paw tokens', H.state.stats.paws || 0, 16], ['💧 Lake rings', H.state.stats.rings || 0, 6], ['🪐 Planets visited', Object.keys(H.state.planetsSeen || {}).length, 6], ['🦌 Species hunted', Object.keys(H.rpg().bestiary).length, Object.keys(H.SPECIES).length - 6], ['🦆 Rubber ducks', d('ducks'), 60], ['🧙 Garden gnomes', d('gnomes'), 25], ['🏆 Golden Goat Statues', d('statues'), 12], ['📦 Treasure chests', d('chests'), 40], ['🎣 Fish species', d('fishSpecies'), 20], ['🛸 UFO parts', Object.keys(H.state.found).filter(k => k.startsWith('ufopart')).length, 5]].forEach(([k, v, m]) => g.appendChild(el('div', 'tile', `<small>${k}</small><b>${v} / ${m}</b><div class="bar"><i style="width:${v / m * 100}%"></i></div>`)));
           b.appendChild(g);
           b.appendChild(el('h3', '', 'Secrets'));
           const sg = el('div', 'grid items'); H.SECRET_ZONES.forEach(s => sg.appendChild(el('div', 'item' + (H.state.secrets[s.id] ? ' owned' : ''), `<b>${H.state.secrets[s.id] ? esc(s.name) : '???'}</b><small>${H.state.secrets[s.id] ? 'Discovered' : 'Undiscovered'}</small>`))); b.appendChild(sg);
@@ -311,7 +326,7 @@
           const v = H.VEHICLE[id], o = H.state.vehicles[id]; const c = el('div', 'card');
           c.innerHTML = `<div class="sw" style="background:${o.paint || v.col}"></div><h4>${esc(v.name)}</h4><p>${typeLabel(v.type)} · ${Math.round(v.spd * (1 + o.upg.eng * 0.12) * 3.6)} km/h</p>`;
           const up = el('div', 'upg');
-          [['eng', 'Engine', 5], ['hand', 'Handling', 5], ['boost', 'Nitro boost', 3]].forEach(([k, label, mx]) => { const lv = o.upg[k]; const cost = 0; const r = el('div', 'upRow', `<span>${label}</span><span class="pips">${'●'.repeat(lv)}${'○'.repeat(mx - lv)}</span>`); const bt = el('button', 'btn sm', lv >= mx ? 'Max' : 'Upgrade ' + coinTag(cost)); bt.disabled = lv >= mx; bt.onclick = () => { if (H.spend(cost)) { o.upg[k]++; H.dirty(true); const sv = H.players[0].summoned; if (sv && sv.def.id === id) sv.upg = o.upg; this.refresh(); } }; r.appendChild(bt); up.appendChild(r); });
+          H.VUPS.forEach(([k, label, mx]) => { const lv = o.upg[k] || 0; const cost = 0; const r = el('div', 'upRow', `<span>${label}</span><span class="pips">${'●'.repeat(lv)}${'○'.repeat(mx - lv)}</span>`); const bt = el('button', 'btn sm', lv >= mx ? 'Max' : 'Upgrade ' + coinTag(cost)); bt.disabled = lv >= mx; bt.onclick = () => { if (H.spend(cost)) { o.upg[k] = (o.upg[k] || 0) + 1; H.dirty(true); const sv = H.players[0].summoned; if (sv && sv.def.id === id) sv.upg = o.upg; this.refresh(); } }; r.appendChild(bt); up.appendChild(r); });
           c.appendChild(up);
           const pr = el('div', 'paints'); H.PAINTS.forEach(pc => { const s = el('button', 'paint' + ((o.paint || v.col) === pc ? ' on' : '')); s.style.background = pc; s.title = 'Paint ' + pc; s.onclick = () => { if (H.spend(0)) { o.paint = pc; const sv = H.players[0].summoned; if (sv && sv.def.id === id) sv.repaint(pc); H.dirty(); this.refresh(); } }; pr.appendChild(s); }); c.appendChild(pr);
           const act = el('div', 'act'); const bt = el('button', 'btn', 'Call it here'); bt.onclick = () => { H.summonVehicle(H.players[0], id); this.close(); }; act.appendChild(bt); c.appendChild(act); g.appendChild(c);
@@ -375,6 +390,15 @@
         b.appendChild(el('p', 'lead', esc(H.missionBrief(m))));
         b.appendChild(el('div', 'tags', `<span>${'◆'.repeat(m.diff)}${'◇'.repeat(3 - m.diff)} difficulty</span><span>Reward ${coinTag(st ? Math.round(m.reward * 0.3) : m.reward)}${st ? ' (replay)' : ''}</span>${m.item && !st ? `<span>+ ${esc(H.COSMETIC[m.item].name)}</span>` : ''}${m.p.veh ? `<span>🚗 ${esc(H.VEHICLE[m.p.veh].name)} provided</span>` : ''}${st ? `<span>Best ${'★'.repeat(st)}</span>` : ''}`));
         const go = el('button', 'btn big', 'Start mission'); go.onclick = () => { this.close(); H.missions.start(m); }; b.appendChild(go);
+      });
+    },
+    openStarMap() {
+      const pl = H.players[0]; const here = H.onPlanet(pl) || 'earth';
+      this.show('Star map', null, null, (t, b) => {
+        b.appendChild(el('p', 'lead', `Galaxy fame: ${H.state.fame || 0}★ — the highest wanted level you've reached. Pick a world and your starship jumps there.`));
+        const g = el('div', 'grid cards');
+        for (const d of [{ id: 'earth', name: 'Earth', blurb: 'Home: Bleatsburg, Dustwater, Frostpeak and the rest.' }, ...H.PLANETS]) { const c = el('div', 'card' + (d.id === here ? ' cur' : '')); c.innerHTML = `<h4>${esc(d.name)}</h4><p>${esc(d.blurb)}</p>`; const a = el('div', 'act'); const bt = el('button', 'btn', d.id === here ? 'You are here' : 'Jump there'); bt.disabled = d.id === here; bt.onclick = () => { this.close(); H.travelPlanet(d.id); }; a.appendChild(bt); c.appendChild(a); g.appendChild(c); }
+        b.appendChild(g);
       });
     },
     // ------------------------------------------------------------------ fishing / cooking overlays

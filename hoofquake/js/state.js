@@ -9,7 +9,7 @@
   const START_EMOTES = ['emote:spin', 'emote:wiggle', 'emote:sit', 'emote:wave'];
   H.newState = () => ({
     v: 1, coins: 750, animals: { goat: 1 }, animal: 'goat', animal2: 'sheep', cos: Object.fromEntries(START_EMOTES.map(e => [e, 1])), outfits: {},
-    vehicles: {}, gadgets: { blaster: 1 }, props: {}, furn: {}, found: {}, fish: {}, secrets: {}, missions: {}, ach: {}, stats: {}, spawn: null, time: 9.5, day: 0, playtime: 0, daily: null, coinsPeak: 750,
+    vehicles: {}, gadgets: { blaster: 1 }, loadout: ['blaster', 'pistol', 'smg', 'pump', 'rocket', 'rail'], gearOn: {}, rpg: { lvl: 1, xp: 0, sp: 0, ups: {}, bestiary: {}, god: false }, props: {}, furn: {}, found: {}, fish: {}, secrets: {}, missions: {}, ach: {}, stats: {}, spawn: null, time: 9.5, day: 0, playtime: 0, daily: null, coinsPeak: 750,
     pos: null,
   });
   // Everything is free: own every animal, vehicle, gadget, cosmetic and property from the start.
@@ -64,7 +64,7 @@
   H.grantCosmetic = function (id, quiet) { if (!H.COSMETIC[id] || H.state.cos[id]) return false; H.state.cos[id] = 1; const it = H.COSMETIC[id]; if (!quiet) H.ui.banner(`✨ New ${H.RAR[it.rar]} cosmetic`, it.name); else H.toast(`✨ Unlocked ${it.name}`); H.dirty(true); return true; };
   H.grantAnimal = function (id) { if (H.state.animals[id]) return; H.state.animals[id] = 1; H.ui.banner('🐾 New animal unlocked!', H.ANIMAL[id].name + ' — ' + H.ANIMAL[id].desc); H.Audio.sfx('unlock'); H.stat('animalsUnlocked', 1); H.checkAch(); H.dirty(true); };
   H.grantVehicle = function (id) { if (H.state.vehicles[id]) return; H.state.vehicles[id] = { upg: { eng: 0, hand: 0, boost: 0 }, paint: null }; H.ui.banner('🚗 New vehicle!', H.VEHICLE[id].name + ' is in your garage.'); H.Audio.sfx('unlock'); H.checkAch(); H.dirty(true); };
-  H.grantSecret = function (id, name) { if (H.state.secrets[id]) return; H.state.secrets[id] = 1; H.ui.banner('🔍 Secret discovered', name + ' · +500 coins'); H.state.coins += 500; H.Audio.sfx('unlock'); H.checkAch(); H.dirty(true); H.emit('secret', id); };
+  H.grantSecret = function (id, name) { if (H.state.secrets[id]) return; H.state.secrets[id] = 1; H.ui.banner('🔍 Secret discovered', name + ' · +500 coins'); H.state.coins += 500; H.addXP && H.addXP(100); H.Audio.sfx('unlock'); H.checkAch(); H.dirty(true); H.emit('secret', id); };
 
   // ---------------- daily challenges ----------------
   const DAILY = [['npcHits', 'Ragdoll {n} people', [10, 25]], ['breaks', 'Break {n} objects', [25, 60]], ['driveKm', 'Drive {n} km', [2, 6]], ['headbutts', 'Headbutt {n} things', [30, 80]], ['specials', 'Use your special ability {n} times', [8, 20]], ['fishCaught', 'Catch {n} fish', [3, 8]], ['missionsDone', 'Complete {n} missions', [2, 5]], ['emotes', 'Emote {n} times', [5, 12]], ['grabs', 'Lick and grab {n} things', [10, 25]], ['explosions', 'Cause {n} explosions', [3, 8]], ['flyKm', 'Fly {n} km', [1, 3]], ['swimKm', 'Swim {n} km', [0.5, 1.5]], ['carsFlipped', 'Flip {n} traffic cars', [3, 8]]];
@@ -107,6 +107,8 @@
       case 'statue': { const k = n('statues'); H.addCoins(1000, 'Golden Goat Statue'); H.ui.banner('🏆 Golden Goat Statue', `${k}/12 found`); if (k === 6) H.grantCosmetic('hat:goldhorns'); if (k === 12) { H.grantAnimal('cosmicgoat'); H.grantCosmetic('aura:cosmic'); } break; }
       case 'chest': openChest(pl); break;
       case 'ufopart': { const k = Object.keys(H.state.found).filter(k => k.startsWith('ufopart')).length; H.toast(`🛸 UFO part ${k}/5`); H.Audio.sfx('ufo'); if (k === 5) { H.grantVehicle('saucer'); H.grantCosmetic('back:ufo'); H.grantSecret('ufoparts', 'The Lunar Saucer, rebuilt'); } break; }
+      case 'paw': { const k = n('paws') + 0; H.stat('paws', 1); H.addCoins(200, 'Paw token'); H.addXP && H.addXP(30, pl.pos); H.toast(`🐾 Paw token ${H.state.stats.paws}/16`); break; }
+      case 'ring': H.stat('rings', 1); H.addXP && H.addXP(40, pl.pos); H.toast(`💧 Lake ring ${H.state.stats.rings}/6`); H.Audio.sfx('checkpoint'); break;
       case 'keycard': H.ui.banner('🔑 Lab Keycard', 'Somewhere in Rustworks there\'s a shed that wants this.'); H.grantCosmetic('neck:keycard', true); H.Audio.sfx('unlock'); break;
     }
     H.fx.burst(c.x, c.y + 1, c.z, new THREE.Color('#ffd76a'), 20, 5, 0.25);
@@ -240,7 +242,7 @@
   H.dirty = function (soon) { H.Save.dirty = true; if (soon) { clearTimeout(H._saveT); H._saveT = setTimeout(() => H.Save.save(), 2500); } };
   H.applyState = function (s) {
     H.state = Object.assign(H.newState(), s);
-    H.state.gadgets = Object.assign({ blaster: 1 }, H.state.gadgets || {});
+    H.state.gadgets = Object.assign({ blaster: 1 }, H.state.gadgets || {}); if (!H.state.loadout) H.state.loadout = ['blaster', 'pistol', 'smg', 'pump', 'rocket', 'rail']; H.state.gearOn = H.state.gearOn || {};
     for (const k of ['animals', 'cos', 'outfits', 'vehicles', 'props', 'furn', 'found', 'fish', 'secrets', 'missions', 'ach', 'stats']) H.state[k] = H.state[k] || {};
     H.grantAll(H.state);
     H.Sky.time = H.state.time || 9.5;

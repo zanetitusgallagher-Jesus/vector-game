@@ -131,7 +131,7 @@
       const frac = A.timed && m.p.time ? A.t / m.p.time : 0.5, stars = A.stars || (frac > 0.5 ? 3 : frac > 0.25 ? 2 : 1);
       const first = !H.state.missions[m.id]; const coins = Math.round(m.reward * (first ? 1 : 0.3) * (0.6 + stars * 0.2));
       H.state.missions[m.id] = Math.max(H.state.missions[m.id] || 0, stars); H.stat('missionsDone', 1);
-      H.Audio.sfx('win'); H.addCoins(coins, 'Mission complete');
+      H.Audio.sfx('win'); H.addCoins(coins, 'Mission complete'); H.addXP && H.addXP(Math.round(m.reward / 5) * (first ? 1 : 0.3), H.players[0].pos);
       H.ui.banner('✅ ' + m.name, `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}  +${H.fmt(coins)} coins${extraText ? ' · ' + extraText : ''}`);
       if (first && m.item) H.grantCosmetic(m.item);
       if (first && !m.item && R() < 0.2) { const pool = H.COSMETICS.filter(x => x.src === 'shop' && x.rar >= 1 && x.rar <= 3 && !H.state.cos[x.id]); if (pool.length) H.grantCosmetic(H.pick(pool).id); }

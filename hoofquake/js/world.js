@@ -7,6 +7,7 @@
   const flatSites = [
     ['city', 70, 1, 1], ['mall', 60], ['industrial', 60], ['suburbs', 70], ['mansions', 110], ['themepark', 60], ['sports', 60],
     ['golf', 80, 0.8], ['farm', 80], ['village', 70], ['skatepark', 30], ['lighthouse', 40],
+    ['raceway', 50], ['military', 60], ['frostpeak', 70],
   ];
 
   function siteMask(s, x, z, feather, sq) {
@@ -37,6 +38,7 @@
     if (d > 0) h = H.lerp(h, 8 + Math.sin(x * 0.03 + z * 0.012) * 4 + Math.sin(x * 0.011 - z * 0.03) * 3 + H.noise(x * 0.01, z * 0.01) * 3, d);
     for (const [k, f, amt, sq] of flatSites) { const s = S[k]; const mk = siteMask(s, x, z, f, sq) * (amt || 1); if (mk > 0) h = H.lerp(h, s.h, mk); }
     const st = siteMask(S.stuntpark, x, z, 40); if (st > 0) h = H.lerp(h, S.stuntpark.h, st);
+    const dw = siteMask(S.dustwater, x, z, 50); if (dw > 0) h = H.lerp(h, S.dustwater.h, dw);
     const ap = airportMask(x, z); if (ap > 0) h = H.lerp(h, 3, ap);
     // lake
     const lk = 1 - H.smooth(S.lake.r * 0.4, S.lake.r, Math.hypot(x - S.lake.x, z - S.lake.z)); if (lk > 0) h = H.lerp(h, -9, lk);
@@ -58,6 +60,7 @@
 
   // Terrain height (bilinear on the baked grid so it matches the mesh)
   H.terrainH = function (x, z) {
+    if (x > 4000 && H.planetH) return H.planetH(x, z);
     const fx = H.clamp((x + HALF) / CELL, 0, N - 0.001), fz = H.clamp((z + HALF) / CELL, 0, N - 0.001);
     const i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j, R = N + 1;
     const a = heights[j * R + i], b = heights[j * R + i + 1], c = heights[(j + 1) * R + i], d = heights[(j + 1) * R + i + 1];
@@ -122,8 +125,12 @@
       if (p.z > it.z + hz) { p.z = it.z + hz; hitN.hit = true; hitN.x = 0; hitN.z = -1; }
       hitN.top = it.y + it.h; return hitN;
     }
+    if (p.x > 4000) { // on a planet: keep inside its disc
+      const pl = H.planetAt && H.planetAt(p.x, p.z); if (pl) { const dx = p.x - pl.x, dz = p.z - pl.z, d = Math.hypot(dx, dz); if (d > 330) { p.x = pl.x + dx / d * 330; p.z = pl.z + dz / d * 330; } }
+    } else {
     if (p.x < -HALF + 10) { p.x = -HALF + 10; } if (p.x > HALF - 10) p.x = HALF - 10;
     if (p.z < -HALF + 10) p.z = -HALF + 10; if (p.z > HALF - 10) p.z = HALF - 10;
+    }
     H.colGrid.query(p.x, p.z, r + 1, tmp);
     for (const o of tmp) {
       if (o.ramp || o.deck) continue;
@@ -219,6 +226,12 @@
     hw([[900, -60], [920, -400], [940, -700]]);
     hw([[1050, 560], [1250, 740]]);
     hw([[-900, 420], [-1150, 700], [-1250, 1000]]);
+    // roads to the Scentline places
+    hw([[-170, -820], [-330, -930], [-450, -1000]]);
+    hw([[700, 460], [800, 400], [830, 340]]);
+    hw([[920, -400], [880, -470]]);
+    hw([[1050, 560], [1100, 700], [1130, 800]]);
+    hw([[280, 140], [340, 150]]);
     H.ROADS = roads;
     const asphalt = new H.Merge(), lines = new H.Merge(), rails = new H.Merge();
     const wht = new THREE.Color('#f2f0e6'), ylw = new THREE.Color('#f2c84a');

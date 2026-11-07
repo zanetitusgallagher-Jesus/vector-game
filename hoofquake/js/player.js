@@ -24,7 +24,7 @@
       if (this.held) this.drop();
     }
     teleport(x, y, z, interior) { this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.interior = interior || null; this.ragdoll = null; this.root.position.copy(this.pos); this.cam.x.set(x, y + 4, z + 8); }
-    knock(ix, iy, iz) { if (this.vehicle || this.ride) return; this.vel.set(this.vel.x + ix, Math.max(this.vel.y, 0) + iy, this.vel.z + iz); this.startRagdoll(2.2); }
+    knock(ix, iy, iz, dmg) { if (this.vehicle || this.ride) return; if (H.hurtPlayer) H.hurtPlayer(this, dmg !== undefined ? dmg : Math.hypot(ix, iy, iz) * 0.3); if (H.noKnock && H.noKnock(this)) return; this.vel.set(this.vel.x + ix, Math.max(this.vel.y, 0) + iy, this.vel.z + iz); this.startRagdoll(2.2); }
     startRagdoll(t) {
       if (this.ride) return; if (this.held) this.drop();
       this.ragdoll = { t: 0, min: t || 2, spin: new V((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 14) }; this.emote = null;
@@ -49,8 +49,8 @@
       const depth = H.waterDepth(this.pos.x, this.pos.z, this.interior);
       const inWater = depth > 0.6 && this.pos.y < 0.3;
       this.inWater = inWater;
-      let spd = st.spd * (inp.sprint ? 1.65 : 1) * (this.timers.howl ? 1.5 : 1) * (this.heldSlow || 1);
-      if (inWater) spd = st.spd * (0.35 + 0.45 * st.swim) * (inp.sprint ? 1.4 : 1);
+      let spd = st.spd * (H.statMul ? H.statMul(this, 'spd') : 1) * (inp.sprint ? 1.65 : 1) * (this.timers.howl ? 1.5 : 1) * (this.heldSlow || 1);
+      if (inWater) spd = st.spd * (0.35 + 0.45 * st.swim) * (H.statMul ? H.statMul(this, 'swm') : 1) * (inp.sprint ? 1.4 : 1);
       if (this.timers.roll) spd *= 2.1; if (this.timers.slide) spd *= 2.2;
       const flying = st.fly && !this.onGround && !inWater;
       if (flying) spd *= 1.5;
@@ -60,7 +60,7 @@
       if (this.gadget && this.idx === 0) this.yaw = H.angLerp(this.yaw, inp.camYaw, Math.min(1, dt * 14)); else if (wl > 0.1 && !inp.moonwalk) this.yaw = H.angLerp(this.yaw, Math.atan2(wx, wz), Math.min(1, dt * (this.onGround ? 12 : 6)));
       // ----- vertical
       if (inp.jumpPressed) {
-        if (this.onGround || this.coyote > 0) { this.vel.y = st.jmp; this.onGround = false; this.coyote = 0; this.usedDbl = false; H.Audio.sfx('jump'); }
+        if (this.onGround || this.coyote > 0) { this.vel.y = st.jmp * (H.statMul ? H.statMul(this, 'jmp') : 1); this.onGround = false; this.coyote = 0; this.usedDbl = false; H.Audio.sfx('jump'); }
         else if (inWater) { this.vel.y = st.jmp * 0.7; }
         else if (st.dbl && !this.usedDbl) { this.usedDbl = true; this.vel.y = st.jmp * 0.95; H.fx.burst(this.pos.x, this.pos.y, this.pos.z, new THREE.Color('#ffffff'), 8, 3, 0.2); }
       }
@@ -97,7 +97,7 @@
       this.propGround(g);
       if (this.pos.y <= this.groundY) {
         if (!this.onGround && this.vel.y < -6) { H.Audio.sfx('land', Math.min(1, -this.vel.y / 30)); if (this.timers.divebomb) { this.timers.divebomb = 0; this.shockwave(12, 38, 14, true); } }
-        if (this.vel.y < -32 && !st.fly && def.id !== 'cat' && !inWater) { this.pos.y = this.groundY; this.startRagdoll(2); this.vel.y = 6; H.floatText('SPLAT!', this.pos, { cls: 'big' }); return; }
+        if (this.vel.y < -32 && !st.fly && def.id !== 'cat' && !inWater) { this.pos.y = this.groundY; if (H.hurtPlayer) H.hurtPlayer(this, (-this.vel.y - 30) * 1.5); this.startRagdoll(2); this.vel.y = 6; H.floatText('SPLAT!', this.pos, { cls: 'big' }); return; }
         this.pos.y = this.groundY; if (this.vel.y < 0) this.vel.y = 0; if (!this.onGround && this.airT > 0.2) { H.stat('bestAir', this.airT, true); H.emit('landed', this, this.airT); }
         this.onGround = true; this.coyote = 0.12; this.airT = 0; this.usedDbl = false;
       } else {
@@ -179,7 +179,7 @@
     }
     attack(mult, reachMul) {
       const def = this.def; this.cd.atk = 0.42; this.atkAnim = 0.35; this.emote = null;
-      const reach = (1.6 + this.radius) * (reachMul || 1), f = (13 + this.mass * 4) * mult, fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), up = def.atk === 'kick' ? 0.25 : 0.45;
+      const reach = (1.6 + this.radius) * (reachMul || 1), f = (13 + this.mass * 4) * mult * (H.statMul ? H.statMul(this, 'str') : 1), fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), up = def.atk === 'kick' ? 0.25 : 0.45;
       let back = def.atk === 'kick' && def.kind === 'quad' ? -1 : 1;
       if (back < 0) { this.yaw += Math.PI; }
       const n = this.hitCone(reach, 0.45, (k, o) => {
@@ -262,6 +262,8 @@
         case 'firebreath': this.timers.flame = 1.6; H.Audio.sfx('fire'); setTimeout(() => H.Audio.sfx('fire'), 600); cd = 3; break;
         case 'spray': this.timers.flame = 1.4; this.sprayWater = true; H.Audio.voice(this.def.voice); cd = 3; break;
         case 'blackhole': this.timers.blackhole = 3.2; this.bh = new V(this.pos.x + fx * 12, this.pos.y + 3, this.pos.z + fz * 12); H.Audio.sfx('ufo'); cd = 8; break;
+        case 'rampage': this.timers.howl = 6; this.timers.rage = 6; H.Audio.voice(this.def.voice, 0.8); this.dash(20, 1, 0.5); cd = 12; break;
+        case 'skyjump': this.vel.y = 45; this.onGround = false; H.Audio.sfx('bounce'); H.fx.burst(this.pos.x, this.pos.y, this.pos.z, new THREE.Color('#ffffff'), 16, 5, 0.3); cd = 0.4; break;
         default: this.shockwave(10, 20, 15);
       }
       this.cd.sp = cd; this.cd.spMax = cd;
