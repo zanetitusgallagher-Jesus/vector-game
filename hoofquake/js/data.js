@@ -333,3 +333,13 @@ H.ACHIEVEMENTS = [
   ['emote20', 'Show-Off', 'Emote 20 times', 'emotes', 20, 400], ['night', 'Night Owl', 'Play through a full day-night cycle', 'days', 1, 500],
   ['summit', 'Peak Performer', 'Stand on top of Grumblepeak', 'summit', 1, 1500], ['event5', 'Weirdness Magnet', 'Witness 5 world events', 'events', 5, 2000],
 ].map(([id, name, desc, stat, goal, reward, item]) => ({ id, name, desc, stat, goal, reward, item }));
+
+// ---------------- EVERYTHING IS FREE ----------------
+// Every animal, vehicle, cosmetic, property and piece of furniture costs nothing (secret ones included).
+H.FREE = true;
+H.RAR_PRICE = H.RAR_PRICE.map(() => 0);
+for (const a of H.ANIMALS) { a.price = 0; delete a.secret; }
+for (const v of H.VEHICLES) { v.price = 0; delete v.secret; }
+for (const c of H.COSMETICS) c.price = 0;
+for (const f of H.FURNITURE) f.price = 0;
+for (const p of H.PROPERTIES) p.price = 0;

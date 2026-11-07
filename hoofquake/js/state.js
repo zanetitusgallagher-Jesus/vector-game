@@ -12,7 +12,18 @@
     vehicles: {}, gadgets: { blaster: 1 }, props: {}, furn: {}, found: {}, fish: {}, secrets: {}, missions: {}, ach: {}, stats: {}, spawn: null, time: 9.5, day: 0, playtime: 0, daily: null, coinsPeak: 750,
     pos: null,
   });
-  H.state = H.newState();
+  // Everything is free: own every animal, vehicle, gadget, cosmetic and property from the start.
+  H.grantAll = function (s) {
+    for (const a of H.ANIMALS) s.animals[a.id] = 1;
+    for (const v of H.VEHICLES) if (!s.vehicles[v.id]) s.vehicles[v.id] = { upg: { eng: 0, hand: 0, boost: 0 }, paint: null };
+    for (const c of H.COSMETICS) s.cos[c.id] = 1;
+    s.gadgets = s.gadgets || {}; for (const g of (H.GADGETS || [])) s.gadgets[g.id] = 1;
+    for (const p of H.PROPERTIES) if (!s.props[p.id]) s.props[p.id] = { furn: [] };
+    for (const f of H.FURNITURE) s.furn[f.id] = Math.max(s.furn[f.id] || 0, 3);
+    // ownership achievements count as earned without a flood of banners
+    for (const a of H.ACHIEVEMENTS) if (['animals', 'vehicles', 'properties', 'cosmetics'].includes(a.stat)) s.ach[a.id] = 1;
+  };
+  H.state = H.newState(); H.grantAll(H.state);
   H.getOutfit = function (animalId, idx) {
     const o = H.state.outfits[animalId] = H.state.outfits[animalId] || { cur: {}, saved: [null, null, null, null, null] };
     if (!o.cur.emotes) o.cur.emotes = START_EMOTES.slice();
@@ -23,7 +34,7 @@
     if (n > 0) { H.Audio.sfx(n > 200 ? 'cash' : 'coin'); H.stat('coinsEarned', n); }
     H.ui && H.ui.coins(n, why); H.checkAch(); H.dirty();
   };
-  H.spend = function (n) { if (H.state.coins < n) { H.toast(`You need ${H.fmt(n - H.state.coins)} more coins.`, 'bad'); H.Audio.sfx('fail'); return false; } H.state.coins -= n; H.Audio.sfx('buy'); H.ui && H.ui.coins(-n); H.dirty(true); return true; };
+  H.spend = function (n) { if (n <= 0) { H.Audio.sfx('buy'); H.dirty(true); return true; } if (H.state.coins < n) { H.toast(`You need ${H.fmt(n - H.state.coins)} more coins.`, 'bad'); H.Audio.sfx('fail'); return false; } H.state.coins -= n; H.Audio.sfx('buy'); H.ui && H.ui.coins(-n); H.dirty(true); return true; };
   H.toast = function (msg, kind) { H.ui ? H.ui.toast(msg, kind) : console.log(msg); };
 
   // ---------------- stats & achievements ----------------
@@ -231,6 +242,7 @@
     H.state = Object.assign(H.newState(), s);
     H.state.gadgets = Object.assign({ blaster: 1 }, H.state.gadgets || {});
     for (const k of ['animals', 'cos', 'outfits', 'vehicles', 'props', 'furn', 'found', 'fish', 'secrets', 'missions', 'ach', 'stats']) H.state[k] = H.state[k] || {};
+    H.grantAll(H.state);
     H.Sky.time = H.state.time || 9.5;
   };
 })();

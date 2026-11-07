@@ -97,10 +97,11 @@
       loading('Waking up the townsfolk…', 80); await wait();
       H.players.push(new H.Player(0)); H.players[0].setAnimal('goat'); placeAtSpawn(H.players[0], false);
       for (const s of H.propSpawns) H.spawnProp(s.type, s.x, null, s.z, { interior: s.interior, ry: s.ry });
-      H.NPCs.init(); H.spawnWorldVehicles(); H.initAir(); H.initTraffic(H.settings.traffic);
+      H.NPCs.init(); H.spawnWorldVehicles(); H.initAir(); H.buildPortal(); H.initTraffic(H.settings.traffic);
       loading('Looking for your save…', 92); await wait();
       const cloud = await H.Save.init(); let saved = null; if (cloud) saved = await H.Save.load();
       if (saved) { H.applyState(saved); H.hasSave = true; if (saved.settings) Object.assign(H.settings, saved.settings); if (saved.keys) H.keys = saved.keys; }
+      H.grantAll(H.state);
       H.Audio.setVol(H.settings.volume);
       H.setAnimal(0, H.state.animal); placeAtSpawn(H.players[0], false);
       H.updateSaleSigns(); H.ui.coins(0);

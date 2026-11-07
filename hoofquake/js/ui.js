@@ -5,7 +5,7 @@
   const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const rarTag = r => `<span class="rar r${r}">${H.RAR[r]}</span>`;
-  const coinTag = n => `<span class="coin">◉ ${H.fmt(n)}</span>`;
+  const coinTag = n => (n ? `<span class="coin">◉ ${H.fmt(n)}</span>` : '<span class="coin">Free</span>');
 
   const ui = H.ui = {
     open: null,
@@ -311,12 +311,12 @@
           const v = H.VEHICLE[id], o = H.state.vehicles[id]; const c = el('div', 'card');
           c.innerHTML = `<div class="sw" style="background:${o.paint || v.col}"></div><h4>${esc(v.name)}</h4><p>${typeLabel(v.type)} · ${Math.round(v.spd * (1 + o.upg.eng * 0.12) * 3.6)} km/h</p>`;
           const up = el('div', 'upg');
-          [['eng', 'Engine', 5], ['hand', 'Handling', 5], ['boost', 'Nitro boost', 3]].forEach(([k, label, mx]) => { const lv = o.upg[k]; const cost = Math.round((Math.max(800, v.price > 0 ? v.price : 20000) * 0.25) * (lv + 1)); const r = el('div', 'upRow', `<span>${label}</span><span class="pips">${'●'.repeat(lv)}${'○'.repeat(mx - lv)}</span>`); const bt = el('button', 'btn sm', lv >= mx ? 'Max' : 'Upgrade ' + coinTag(cost)); bt.disabled = lv >= mx; bt.onclick = () => { if (H.spend(cost)) { o.upg[k]++; H.dirty(true); const sv = H.players[0].summoned; if (sv && sv.def.id === id) sv.upg = o.upg; this.refresh(); } }; r.appendChild(bt); up.appendChild(r); });
+          [['eng', 'Engine', 5], ['hand', 'Handling', 5], ['boost', 'Nitro boost', 3]].forEach(([k, label, mx]) => { const lv = o.upg[k]; const cost = 0; const r = el('div', 'upRow', `<span>${label}</span><span class="pips">${'●'.repeat(lv)}${'○'.repeat(mx - lv)}</span>`); const bt = el('button', 'btn sm', lv >= mx ? 'Max' : 'Upgrade ' + coinTag(cost)); bt.disabled = lv >= mx; bt.onclick = () => { if (H.spend(cost)) { o.upg[k]++; H.dirty(true); const sv = H.players[0].summoned; if (sv && sv.def.id === id) sv.upg = o.upg; this.refresh(); } }; r.appendChild(bt); up.appendChild(r); });
           c.appendChild(up);
-          const pr = el('div', 'paints'); H.PAINTS.forEach(pc => { const s = el('button', 'paint' + ((o.paint || v.col) === pc ? ' on' : '')); s.style.background = pc; s.title = 'Paint ' + pc + ' (250)'; s.onclick = () => { if (H.spend(250)) { o.paint = pc; const sv = H.players[0].summoned; if (sv && sv.def.id === id) sv.repaint(pc); H.dirty(); this.refresh(); } }; pr.appendChild(s); }); c.appendChild(pr);
+          const pr = el('div', 'paints'); H.PAINTS.forEach(pc => { const s = el('button', 'paint' + ((o.paint || v.col) === pc ? ' on' : '')); s.style.background = pc; s.title = 'Paint ' + pc; s.onclick = () => { if (H.spend(0)) { o.paint = pc; const sv = H.players[0].summoned; if (sv && sv.def.id === id) sv.repaint(pc); H.dirty(); this.refresh(); } }; pr.appendChild(s); }); c.appendChild(pr);
           const act = el('div', 'act'); const bt = el('button', 'btn', 'Call it here'); bt.onclick = () => { H.summonVehicle(H.players[0], id); this.close(); }; act.appendChild(bt); c.appendChild(act); g.appendChild(c);
         }
-        b.appendChild(el('p', 'muted', 'Paint jobs cost 250 coins. Engine adds +12% top speed per level; Nitro lets you hold Sprint to boost.'));
+        b.appendChild(el('p', 'muted', 'Paint jobs and upgrades are free. Engine adds +12% top speed per level; Nitro lets you hold Sprint to boost.'));
         b.appendChild(g);
       });
     },
@@ -362,7 +362,7 @@
           const st = H.state.missions[m.id] || 0; const d = Math.round(Math.hypot(m.x - p.pos.x, m.z - p.pos.z)); const r = el('div', 'mrow' + (st ? ' done' : ''));
           r.innerHTML = `<span class="ic">${H.TYPE_INFO[m.type][0]}</span><div><b>${esc(m.type === 'secret' && !st ? m.name + ' (secret)' : m.name)}</b><small>${esc(H.SITES[m.region] ? H.SITES[m.region].name : 'Around town')} · ${d} m · ${'◆'.repeat(m.diff)}${'◇'.repeat(3 - m.diff)}${st ? ' · ' + '★'.repeat(st) : ''}</small></div><span class="rw">${coinTag(st ? Math.round(m.reward * 0.3) : m.reward)}</span>`;
           const tr = el('button', 'btn sm', 'Track'); tr.onclick = () => { H.waypoint = { x: m.x, z: m.z, label: m.name }; this.toast('Tracking ' + m.name); this.close(); };
-          const fee = Math.round(50 + d * 0.15); const tx = el('button', 'btn sm ghost', 'Taxi ' + coinTag(fee)); tx.onclick = () => { if (H.spend(fee)) { H.travelTo(m.x, m.z); this.close(); } };
+          const fee = 0; const tx = el('button', 'btn sm ghost', 'Taxi there'); tx.onclick = () => { if (H.spend(fee)) { H.travelTo(m.x, m.z); this.close(); } };
           r.append(tr, tx); g.appendChild(r);
         });
         if (list.length > 120) g.appendChild(el('p', 'muted', `Showing the 120 nearest of ${list.length}. Pick a category to narrow down.`));
