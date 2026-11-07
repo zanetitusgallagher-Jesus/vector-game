@@ -22,7 +22,7 @@
     // ------------------------------------------------------------------ main menu
     mainMenu(show) { $('#menu').hidden = !show; H.paused = show && H.started; if (show) { this.panel.hidden = true; this.renderFn = null; if (this.preview) this.preview.stop(); $('#btnPlay').textContent = H.started ? 'Resume' : 'Play'; $('#btnContinue').hidden = H.started || !H.hasSave; document.exitPointerLock && document.exitPointerLock(); } },
     menu(id) {
-      const fn = { animals: () => this.openAnimals(), customize: () => this.openCustomize(), shop: () => this.openShop('cosmetics'), inventory: () => this.openInventory(), garage: () => this.openGarage(), properties: () => this.openShop('properties'), missions: () => this.openMissions(), map: () => this.openMap(), multiplayer: () => this.openMulti(), settings: () => this.openSettings(), save: () => this.openSaveCode() }[id];
+      const fn = { scentline: () => this.openScentline(), animals: () => this.openAnimals(), customize: () => this.openCustomize(), shop: () => this.openShop('cosmetics'), inventory: () => this.openInventory(), garage: () => this.openGarage(), properties: () => this.openShop('properties'), missions: () => this.openMissions(), map: () => this.openMap(), multiplayer: () => this.openMulti(), settings: () => this.openSettings(), save: () => this.openSaveCode() }[id];
       if (fn) { $('#menu').hidden = true; H.paused = true; fn(); }
     },
     show(title, tabs, active, render) {
@@ -36,7 +36,7 @@
     // ------------------------------------------------------------------ toasts, banners, coins
     toast(msg, kind) { if (!msg) return; const t = el('div', 'toast ' + (kind || ''), esc(msg)); this.toasts.appendChild(t); setTimeout(() => t.classList.add('out'), 3200); setTimeout(() => t.remove(), 3800); while (this.toasts.children.length > 5) this.toasts.firstChild.remove(); },
     banner(title, sub) { const b = el('div', 'bannerItem', `<b>${esc(title)}</b><span>${esc(sub || '')}</span>`); this.bannerEl.appendChild(b); setTimeout(() => b.classList.add('out'), 3800); setTimeout(() => b.remove(), 4400); while (this.bannerEl.children.length > 3) this.bannerEl.firstChild.remove(); },
-    coins(delta, why) { $('#coins').textContent = H.fmt(H.state.coins); if (delta) { const f = el('div', 'coinDelta ' + (delta > 0 ? 'up' : 'down'), (delta > 0 ? '+' : '−') + H.fmt(Math.abs(delta)) + (why ? ' · ' + esc(why) : '')); $('#coinBox').appendChild(f); setTimeout(() => f.remove(), 1800); } },
+    coins(delta, why) { if (H.FREE && H.state.coins < 999999999) H.state.coins = 999999999; $('#coins').textContent = H.FREE ? '∞ · Everything free' : H.fmt(H.state.coins); if (delta && !H.FREE) { const f = el('div', 'coinDelta ' + (delta > 0 ? 'up' : 'down'), (delta > 0 ? '+' : '−') + H.fmt(Math.abs(delta)) + (why ? ' · ' + esc(why) : '')); $('#coinBox').appendChild(f); setTimeout(() => f.remove(), 1800); } },
     combo(c) { const e = $('#combo'); if (c.t <= 0 || c.pts <= 0) { e.hidden = true; return; } e.hidden = false; e.innerHTML = `<b>${esc(c.label)}</b><span>${H.fmt(c.pts)} chaos × ${Math.floor(c.mult)}</span>`; e.style.setProperty('--k', Math.min(1, c.t / 3)); },
     saved(ok, code) { const s = $('#saveDot'); s.textContent = ok ? 'Saved' : 'Save failed'; s.className = ok ? 'ok' : 'bad'; clearTimeout(this._sd); this._sd = setTimeout(() => (s.textContent = ''), 2500); },
     fade() { const f = $('#fade'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); },
@@ -114,7 +114,7 @@
         draw();
         c.onclick = (e) => { const r = c.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width * 3200 - 1600, z = (e.clientY - r.top) / r.height * 3200 - 1600; H.waypoint = { x, z, label: 'Map marker' }; H.Audio.sfx('checkpoint'); draw(); this.toast('Waypoint set'); };
         const ft = el('div', 'row wrap'); ft.appendChild(el('b', '', 'Fast travel: ')); const owned = H.PROPERTIES.filter(p => H.state.props[p.id]);
-        if (!owned.length) ft.appendChild(el('span', 'muted', 'Buy a property to unlock fast travel.'));
+        for (const k of ['dustwater', 'frostpeak', 'raceway', 'military', 'bank', 'brambles']) { const s = H.SITES[k]; const bt = el('button', 'btn sm buy', esc(s.name)); bt.onclick = () => { H.travelTo(s.x, s.z + 10); this.close(); }; ft.appendChild(bt); }
         owned.forEach(p => { const bt = el('button', 'btn sm', esc(p.name)); bt.onclick = () => { H.travelTo(p.door.x, p.door.z); this.close(); }; ft.appendChild(bt); });
         b.appendChild(ft);
       });
@@ -390,6 +390,25 @@
         b.appendChild(el('p', 'lead', esc(H.missionBrief(m))));
         b.appendChild(el('div', 'tags', `<span>${'◆'.repeat(m.diff)}${'◇'.repeat(3 - m.diff)} difficulty</span><span>Reward ${coinTag(st ? Math.round(m.reward * 0.3) : m.reward)}${st ? ' (replay)' : ''}</span>${m.item && !st ? `<span>+ ${esc(H.COSMETIC[m.item].name)}</span>` : ''}${m.p.veh ? `<span>🚗 ${esc(H.VEHICLE[m.p.veh].name)} provided</span>` : ''}${st ? `<span>Best ${'★'.repeat(st)}</span>` : ''}`));
         const go = el('button', 'btn big', 'Start mission'); go.onclick = () => { this.close(); H.missions.start(m); }; b.appendChild(go);
+      });
+    },
+    openScentline() {
+      this.show('Scentline world', null, null, (t, b) => {
+        b.appendChild(el('p', 'lead', 'Everything from Scentline is in this world, and all of it is free. Jump straight to it.'));
+        b.appendChild(el('h3', '', 'Places'));
+        const g = el('div', 'grid cards');
+        const places = [['dustwater', 'Desert frontier town with a saloon, a sheriff and a bank to rob.'], ['frostpeak', 'Snowy ski village up in the mountains.'], ['raceway', 'Lap races against three rival drivers. Missions start at the pit lane.'], ['military', 'Tanks, a fighter jet and a starship parked on the base.'], ['bank', 'Hack the vault (Interact at the vault door), then outrun the police.'], ['brambles', 'Home of the Bramble King boss. Bring a big gun.']];
+        for (const [k, blurb] of places) { const s = H.SITES[k]; const c = el('div', 'card'); c.innerHTML = `<h4>${esc(s.name)}</h4><p>${esc(blurb)}</p>`; const a = el('div', 'act'); const bt = el('button', 'btn', 'Go there'); bt.onclick = () => { this.close(); if (!H.started) H.startGame(true); H.travelTo(s.x, s.z + 10); }; a.appendChild(bt); c.appendChild(a); g.appendChild(c); }
+        b.appendChild(g);
+        b.appendChild(el('h3', '', 'Planets'));
+        const g2 = el('div', 'grid cards');
+        for (const p of H.PLANETS) { const c = el('div', 'card'); c.innerHTML = `<h4>${esc(p.name)}</h4><p>${esc(p.blurb || '')}</p>`; const a = el('div', 'act'); const bt = el('button', 'btn', 'Fly there'); bt.onclick = () => { this.close(); if (!H.started) H.startGame(true); const pl = H.players[0]; H.travelTo(p.x, p.z + 90); setTimeout(() => H.summonVehicle(pl, 'starship'), 300); H.toast('Your starship is parked next to you. Get in and press ' + H.keyName('special') + ' for the star map.'); }; a.appendChild(bt); c.appendChild(a); g2.appendChild(c); }
+        b.appendChild(g2);
+        b.appendChild(el('h3', '', 'Scentline vehicles, right here'));
+        const r = el('div', 'row wrap');
+        for (const id of ['tank', 'fighter', 'starship', 'policebike', 'sportbike', 'offroad', 'ambulance', 'hatch']) { const d = H.VEHICLE[id]; if (!d) continue; const bt = el('button', 'btn sm', esc(d.name)); bt.onclick = () => { this.close(); if (!H.started) H.startGame(true); H.summonVehicle(H.players[0], id); }; r.appendChild(bt); }
+        b.appendChild(r);
+        b.appendChild(el('p', 'muted', `Scentline controls: ${H.keyName('gadget')} cycles guns · ${H.keyName('heavy')} heavy attack · ${H.keyName('sound')} animal sound · hold ${H.keyName('sniff')} to sniff · ${H.keyName('interact')} next to a car hijacks it.`));
       });
     },
     openStarMap() {

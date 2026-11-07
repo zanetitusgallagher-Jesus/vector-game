@@ -83,7 +83,7 @@
     p.hp = 0; p.dead = true; if (p.vehicle) p.vehicle.exit(p); if (p.mount) H.dismount(p);
     p.startRagdoll(4); H.ui.banner('💫 Knocked out', 'You wake up somewhere safer…'); H.Audio.sfx('fail');
     H.stat('deaths', 1); H.heatLevel = 0; H.clearCops && H.clearCops();
-    const lost = Math.min(500, Math.floor(H.state.coins * 0.05)); if (lost > 0) H.addCoins(-lost, 'Medical bills');
+    
     setTimeout(() => {
       p.dead = false; p.ragdoll = null; p.hp = H.maxHp(p); p.st = H.maxSt(p); p.parts.rig.rotation.set(0, 0, 0);
       let x = 30, z = 62; const s = H.state.spawn && H.PROP[H.state.spawn]; if (s) { x = s.door.x; z = s.door.z + 2; }
