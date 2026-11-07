@@ -1,6 +1,6 @@
 # Hoofquake
 
-An original 3D open-world animal sandbox that runs in the browser (Three.js, no build step). 
+An original 3D open-world animal sandbox that runs in the browser (Three.js, no build step).
 
 ## Play online
 
@@ -32,6 +32,11 @@ Add `#roomname` to the URL to play in a private room (for example `http://your-h
 When the game runs as a claude.ai artifact it uses the platform's live room instead of this server: signed-in people the owner shares the page with join the same world. Public-link visitors can't join that room.
 
 Three.js loads from jsDelivr, with `vendor/three.min.js` (MIT, see `vendor/THREE-LICENSE`) as an offline fallback.
+
+## Two worlds, everything free
+
+- **Everything is free.** Every animal (secret ones included), vehicle, cosmetic, property, piece of furniture, gadget, upgrade and paint job costs nothing and is unlocked from the start. Coins still pay out, there's just nothing you need them for.
+- **Scentline** is a second world in `scentline/`: a separate open-world animal game (dog, cat, goat, boar, gorilla, bear, crocodile, pitbull, eagle) with its own towns, cars, aircraft, guns, bases and banks. Get there from the main menu (**Travel to Scentline**) or the glowing portal in Bleatsburg's city plaza; its title and pause screens have a button back. In Scentline every animal, rare coat and weapon is unlocked and every shop item, vehicle, upgrade, base move, repair and galaxy trip is free. Scentline keeps its own save (on the device) and its own online play.
 
 ## What's in it
 

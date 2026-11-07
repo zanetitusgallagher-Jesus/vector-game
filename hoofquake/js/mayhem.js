@@ -12,6 +12,7 @@
     { id: 'gust', name: 'Gust Cannon', price: 7000, rate: 0.9, speed: 0, desc: 'A cone of hurricane wind that throws everything in front of you.' },
     { id: 'tranq', name: 'Snooze Dart', price: 3000, rate: 0.5, speed: 140, desc: 'Puts people and animals to sleep for a while. Rude, but quiet.' },
   ];
+  H.GADGETS.forEach(g => (g.price = 0)); // everything is free
   H.GADGET = {}; H.GADGETS.forEach(g => (H.GADGET[g.id] = g));
   H.shots = [];
   const PAINT = ['#ff3a6a', '#3ad8ff', '#ffd21a', '#7aff3a', '#b84aff', '#ff8a1a'];
@@ -232,4 +233,20 @@
     return false;
   };
   H.PROP_TYPES.apple = ['sphere', [0.5, 0.5, 0.5], '#d8261a', 0.25, 0.2, 0.3, 8, 1, { splat: '#ffe8c0' }];
+
+  // ------------------------------------------------------------------ portal to the Scentline world
+  H.travelToScentline = function () {
+    H.ui.toast('🌀 Travelling to Scentline…'); H.Audio.sfx('teleport');
+    try { if (H.Save.ready) H.Save.save(); } catch (e) { }
+    setTimeout(() => { location.href = 'scentline/'; }, 500);
+  };
+  H.buildPortal = function () {
+    const x = 60, z = 60, y = H.groundAt(x, z, 999); const g = new THREE.Group(); g.position.set(x, y, z);
+    const ring = H.mesh('torus', '#8fcf5a', 7, 7, 6, 0, 4.2, 0, { emissive: '#4a8a2a', emissiveIntensity: 0.9 }); g.add(ring);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(3, 40), new THREE.MeshBasicMaterial({ color: '#f0a93a', transparent: true, opacity: 0.55, side: THREE.DoubleSide })); disc.position.y = 4.2; g.add(disc);
+    g.add(H.mesh('cyl', '#3a4a30', 5, 0.4, 5, 0, 0.2, 0));
+    H.scene.add(g); H.makeSign('SCENTLINE →', x, y + 9, z, 8, 1.4, '#0b0f0a', '#f0a93a');
+    H.anims.push((dt, t) => { ring.rotation.z += dt * 0.8; disc.material.opacity = 0.4 + Math.sin(t * 3) * 0.15; if (Math.random() < dt * 20) H.fx.spawn(x + (Math.random() - 0.5) * 5, y + 1.5 + Math.random() * 5, z, 0, 1.5, 0, new THREE.Color(Math.random() < 0.5 ? '#f0a93a' : '#8fcf5a'), 0.25, 1, -1); });
+    H.addInteract({ x, y: y + 1, z, r: 5, label: '🌀 Travel to Scentline (a second world)', kind: 'custom', fn: () => H.travelToScentline() });
+  };
 })();
