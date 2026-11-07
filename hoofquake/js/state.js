@@ -8,12 +8,13 @@
 
   const START_EMOTES = ['emote:spin', 'emote:wiggle', 'emote:sit', 'emote:wave'];
   H.newState = () => ({
-    v: 1, coins: 750, animals: { goat: 1 }, animal: 'goat', animal2: 'sheep', cos: Object.fromEntries(START_EMOTES.map(e => [e, 1])), outfits: {},
-    vehicles: {}, gadgets: { blaster: 1 }, loadout: ['blaster', 'pistol', 'smg', 'pump', 'rocket', 'rail'], gearOn: {}, rpg: { lvl: 1, xp: 0, sp: 0, ups: {}, bestiary: {}, god: false }, props: {}, furn: {}, found: {}, fish: {}, secrets: {}, missions: {}, ach: {}, stats: {}, spawn: null, time: 9.5, day: 0, playtime: 0, daily: null, coinsPeak: 750,
+    v: 1, coins: 999999999, animals: { goat: 1 }, animal: 'goat', animal2: 'sheep', cos: Object.fromEntries(START_EMOTES.map(e => [e, 1])), outfits: {},
+    vehicles: {}, gadgets: { blaster: 1 }, loadout: ['blaster', 'pistol', 'smg', 'pump', 'rocket', 'rail'], gearOn: {}, rpg: { lvl: 1, xp: 0, sp: 0, ups: {}, bestiary: {}, god: false }, props: {}, furn: {}, found: {}, fish: {}, secrets: {}, missions: {}, ach: {}, stats: {}, spawn: null, time: 9.5, day: 0, playtime: 0, daily: null, coinsPeak: 999999999,
     pos: null,
   });
   // Everything is free: own every animal, vehicle, gadget, cosmetic and property from the start.
   H.grantAll = function (s) {
+    s.coins = Math.max(s.coins || 0, 999999999);
     for (const a of H.ANIMALS) s.animals[a.id] = 1;
     for (const v of H.VEHICLES) if (!s.vehicles[v.id]) s.vehicles[v.id] = { upg: { eng: 0, hand: 0, boost: 0 }, paint: null };
     for (const c of H.COSMETICS) s.cos[c.id] = 1;
@@ -34,7 +35,7 @@
     if (n > 0) { H.Audio.sfx(n > 200 ? 'cash' : 'coin'); H.stat('coinsEarned', n); }
     H.ui && H.ui.coins(n, why); H.checkAch(); H.dirty();
   };
-  H.spend = function (n) { if (n <= 0) { H.Audio.sfx('buy'); H.dirty(true); return true; } if (H.state.coins < n) { H.toast(`You need ${H.fmt(n - H.state.coins)} more coins.`, 'bad'); H.Audio.sfx('fail'); return false; } H.state.coins -= n; H.Audio.sfx('buy'); H.ui && H.ui.coins(-n); H.dirty(true); return true; };
+  H.spend = function (n) { if (H.FREE || n <= 0) { H.Audio.sfx('buy'); H.dirty(true); return true; } if (H.state.coins < n) { H.toast(`You need ${H.fmt(n - H.state.coins)} more coins.`, 'bad'); H.Audio.sfx('fail'); return false; } H.state.coins -= n; H.Audio.sfx('buy'); H.ui && H.ui.coins(-n); H.dirty(true); return true; };
   H.toast = function (msg, kind) { H.ui ? H.ui.toast(msg, kind) : console.log(msg); };
 
   // ---------------- stats & achievements ----------------

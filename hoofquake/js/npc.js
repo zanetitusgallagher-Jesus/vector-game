@@ -73,7 +73,7 @@
       } else if (this.state === 'chase') {
         const c = this.chase; const dx = c.pos.x - this.pos.x, dz = c.pos.z - this.pos.z, d = Math.hypot(dx, dz);
         this.yaw = H.angLerp(this.yaw, Math.atan2(dx, dz), dt * 8); spd = 9.5;
-        if (d < 1.6 && !c.vehicle && !c.ragdoll && Math.abs(c.pos.y - this.pos.y) < 2) { c.knock(dx / d * 6, 8, dz / d * 6); const fine = Math.min(500, Math.floor(H.state.coins * 0.05)); if (fine > 0) { H.addCoins(-fine, 'Animal Control fine'); } H.floatText('GOTCHA!', this.pos, { follow: this, cls: 'speech' }); H.heatLevel = Math.max(0, H.heatLevel - 1.5); }
+        if (d < 1.6 && !c.vehicle && !c.ragdoll && Math.abs(c.pos.y - this.pos.y) < 2) { c.knock(dx / d * 6, 8, dz / d * 6);  H.floatText('GOTCHA!', this.pos, { follow: this, cls: 'speech' }); H.heatLevel = Math.max(0, H.heatLevel - 1.5); }
         if (H.heatLevel < 1 || d > 260) { this.state = 'idle'; if (this.zone.temp) this.gone = true; }
       } else if (this.state === 'walk') {
         const dx = this.target.x - this.pos.x, dz = this.target.z - this.pos.z, d = Math.hypot(dx, dz);

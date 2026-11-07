@@ -126,6 +126,7 @@
     H.started = true; H.ui.mainMenu(false); H.initCollectibles();
     if (cont) placeAtSpawn(H.players[0], true);
     if (!H.state.daily) H.newDay();
+    if (!cont) setTimeout(() => H.ui.banner('Hoofquake × Scentline 🐾', 'Everything is free: every animal, car, gun and house. Press ' + H.keyName('gadget') + ' for guns, ' + H.keyName('heavy') + ' heavy attack, Menu → Scentline world to jump to Dustwater, the raceway, the army base or other planets.'), 400);
     if (!cont) setTimeout(() => H.ui.banner('Welcome to Bleatsburg 🐐', H.settings.touch ? 'Stick to move · BUTT headbutts · LICK grabs · USE enters cars & shops · glowing beacons are missions' : `${H.keyName('move')} move · ${H.keyName('jump')} jump · F/click headbutt · G/right-click lick · Q special · E interact`), 800);
     H.Audio.sfx('win');
   };
