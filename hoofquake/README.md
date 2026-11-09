@@ -1,93 +1,56 @@
-# Hoofquake
+# Scentline × Hoofquake
 
-An original 3D open-world animal sandbox that runs in the browser (Three.js, no build step).
+One open-world 3D animal game in the browser. **Scentline is the base game** (its world, engine, controls, police, guns, planets and online play), and **Hoofquake's animals, vehicles, city, collectibles and missions are built into it**. It is one world, one save and one set of menus. Everything is free.
 
-## Play online
+**Play:** https://zanetitusgallagher-jesus.github.io/vector-game/hoofquake/
 
-**https://zanetitusgallagher-jesus.github.io/vector-game/hoofquake/**
+## What Hoofquake added to Scentline
 
-Online play there is peer-to-peer, the same way the brawler works: everyone on the page meets through PeerJS's public broker, the first player in a room hosts it in their browser tab, and if the host leaves another player takes over. Add `#roomname` to the address for a private room. Players behind very strict networks (some corporate or mobile NATs) may fail to connect, since there's no relay server.
+- **35 more animals (44 in all).** Sheep, cow, pig, horse, zebra, unicorn, lion, tiger, wolf, fox, rabbit, hamster, chicken, owl, flamingo, penguin, land shark, elephant, rhino, giraffe, camel, kangaroo, panda, T-Rex, triceratops, baby raptor, pterodactyl, dragon, Robo-Goat 3000, Mecha Bear, Mutant Goat, Cosmic Goat, Lab Slime, The Mossback and deer.
+  - They sit next to Scentline's dog, cat, goat, boar, gorilla, bear, crocodile, pit bull and eagle in the Animals tab (**Tab**).
+  - Each new animal has its own attack, heavy move, sound and special. Hoofquake's specials came along too: fire breath, eye lasers, trunk blast, buck, rainbow blast, egg bomb, spit, shoulder rocket, teleport and black hole.
+  - Flyers (dragon, owl, pterodactyl, Robo-Goat, Cosmic Goat, chicken, flamingo) fly the way Scentline's eagle does.
+- **Bleatsburg**, Hoofquake's city, is a new district in the west of Scentline's map, on the highway between Ironworks and Dustwater. It has:
+  - Goat Plaza with a giant golden goat, City Hall and the Moo-tel Tower.
+  - Shops: the Critter Adoption Center (pick any animal), the Hoof Mall (guns, gear and vehicles) and Gnome Gnook (change your look).
+  - The Hay Bale Diner, a football stadium, and apartment towers.
+- **Hoofquake's vehicles** are in the dealership and parked around the world:
+  - Cars: supercar, stretch limo, golf cart, turbo kart, ice cream van, monster truck.
+  - Work and other vehicles: mega digger, pedal bike, jet ski, stunt plane and a secret saucer.
+- **70 Hoofquake missions** across the whole map, marked by yellow beacons. Walk or drive into a beacon and press **T**.
+  - Mission types: foot races, street races, air races through rings in the sky, deliveries, chaos sprees, scare fests, stunt jumps, hunts, stadium football, rooftop climbs, coin rushes and a rubber-duck hunt.
+  - The new **Missions** tab lists them all and sets waypoints.
+- **33 rubber ducks**, Hoofquake's collectible, are hidden all over Scentline's world.
 
-The game picks its connection automatically: its own server when served by `server/server.js`, the claude.ai live room when opened as a claude.ai artifact, otherwise peer-to-peer.
+The rest is Scentline as it was: hunting, the RPG stats, wanted levels and police, guns and gear, the raceway, Fort Grizzle, bank heists, secret bases, the starship and six planets, and peer-to-peer online play.
 
-## Run it (with online multiplayer)
+## Controls
 
-```bash
-cd hoofquake/server
-npm install
-npm start
-# open http://localhost:8080 — everyone who opens this address plays together
-```
+**PC:**
 
-Add `#roomname` to the URL to play in a private room (for example `http://your-host:8080/#party`). The Multiplayer screen shows the invite link.
-
-### Deploy the server
-
-- **Render (free tier, WebSockets supported):** New → Blueprint → this repo, blueprint path `hoofquake/server/render.yaml`. You get a public `https://…onrender.com` link.
-- **Docker anywhere:** from `hoofquake/`, `docker build -f server/Dockerfile -t hoofquake .` then `docker run -p 8080:8080 hoofquake`.
-- **Any Node 18+ host:** run `node server/server.js` with `PORT` set. Put it behind HTTPS so browsers use `wss://`.
-
-### Online play as a claude.ai artifact
-
-When the game runs as a claude.ai artifact it uses the platform's live room instead of this server: signed-in people the owner shares the page with join the same world. Public-link visitors can't join that room.
-
-Three.js loads from jsDelivr, with `vendor/three.min.js` (MIT, see `vendor/THREE-LICENSE`) as an offline fallback.
-
-## Hoofquake + Scentline, one game, everything free
-
-Scentline's content and systems are rebuilt inside Hoofquake's engine, so it's one world, one save and one roster:
-
-- **Scentline's animals** join the roster (Boar, Pit Bull), and every animal gets Scentline's moves: a heavy attack (**V**: pounce, charge, ground pound or swoop), an animal sound (**B**: bark, meow, growl… scares people, freezes small prey, cats and rabbits charm people into petting you) and, for animals with a nose, **Sniff** (hold **Z**) to see scent trails to collectibles, prey and buried treasure.
-- **RPG layer:** health and stamina, XP and levels, and a skill point per level for six stats (speed, strength, stamina, jumping, swimming, durability) kept per animal. You can be knocked out and wake up at home. God mode is in Animals → Stats.
-- **Hunting:** wildlife has health. Knock animals out to hunt them, then Interact to eat them and heal. Wolves, lake gators, sand beasts, drakes, ash beasts and the **Bramble King** boss in the Northern Rocks fight back. Animals → Bestiary tracks what you've hunted.
-- **Arsenal:** Scentline's 29 guns join Hoofquake's gadgets (34 weapons in all: pistols, SMGs, snipers, miniguns, railguns, chain-lightning arc casters, gravity cannons, rocket and meteor launchers…), plus its 16 pieces of gear (armour, shields, regeneration, moon boots…). Pick a loadout of 6 in Shop → Arsenal; **X** cycles it.
-- **Wanted level:** crimes people see raise your stars. Police chase you on foot, then police cars and bikes, then SWAT and the army, who shoot back. Lose them to drop your stars.
-- **Vehicles:** Scentline's hatchback, SUV, van, ambulance, delivery truck, sport bike, cruiser, scooter, police bike, off-roader, **battle tank** (turret cannon), **fighter jet** (guns and missiles) and **starship** join the garage. Scentline's car upgrades (armour, grip tires, nitro, ram bumper, mounted guns, rocket pods, underglow) work on every car. Interact next to any traffic car to **hijack** it.
-- **Places:** **Dustwater** (desert frontier town), **Frostpeak** ski village, the **Scentline Raceway** (lap races against three rival drivers), **Fort Grizzle** military base (tanks, fighter jet, starship), two **banks** whose vaults you can hack, 16 **paw tokens**, 6 **lake rings** to swim through, and the Northern Rocks.
-- **Space:** fly the starship and press Special (**Q**) for the star map: **Selene, Ares, Zephyria, Mythos, Cyberia and Pyros**, each with its own terrain, starport, settlement, wildlife and signature weapon. Galaxy fame follows your highest wanted level.
-- **Everything is free:** every animal, vehicle, weapon, gear item, cosmetic, property, furniture item and upgrade is unlocked from the start.
-
-## What's in it
-
-| Area | Contents |
+| Key | Action |
 | --- | --- |
-| World | 3.2 km × 3.2 km map: Bleatsburg City, suburbs, a mansion plateau, mall, industrial yard, airport, theme park (rideable coaster and drop tower), sports complex, golf course, farm, village, lake, river with bridges, beach and pier, lighthouse, island, desert with stunt park, jungle temple, pine forest, mountains with an observatory, a floating Cloud Garden |
-| Secrets | Hidden laboratory (keycard chain), Grumble Cave, sunken shipwreck, UFO crash site, the Mossback cryptid quest, a dino egg that hatches at night, 14 discoverable secret places |
-| Animals | 43 playable animals (Hoofquake's 41 plus Scentline's Boar and Pit Bull), each with its own model, voice, stats, movement (fly, glide, climb, dive, double jump, dig) and special ability |
-| Vehicles | 25 vehicles: cars, supercars, trucks, bus, fire truck, motorbike, bike, skateboard, go-kart, tractor, digger, monster truck, boats, jet ski, submarine, hovercraft, helicopter, planes, a secret saucer. Buy, summon, paint and upgrade (engine, handling, nitro) |
-| Missions | 261 generated missions across 22 types (races on foot, road, water and air, deliveries, taxi, chaos, human bowling, scares, stunts, flips, football, basketball, 9-hole golf, bowling, fishing, sheep herding, harvest, cooking, treasure hunts, rooftop parkour, skate, obstacle course, star hunts, secret quests) plus three daily challenges |
-| Cosmetics | 648 items in 13 slots (fur, patterns, eyes, hats, face, neck, outfits, back, feet, tail, trails, auras, emotes) across Common → Mythical and Secret rarities, with try-on preview and five saved outfits per animal |
-| Properties | 14 properties from a tiny apartment to a private island, each with a decoratable interior, wardrobe, garage terminal and trophy shelf; 40 furniture items |
-| Collectibles | 60 rubber ducks, 25 gnomes, 12 golden statues, 40 treasure chests, 20 fish species, 40 achievements |
-| Living world | Pedestrians with day/night routines, farm animals and wildlife, road traffic, Animal Control heat, random world events (meteor shower, UFO abductions, fruit storm, stampede, coin rain, giant beach ball), dynamic weather and a 20-minute day/night cycle |
-| Interact with everything | Gadgets (Paint Blaster, Hay Shotgun, Rocket Launcher, Gust Cannon, Snooze Dart) with camera aiming; shoot people, wildlife, traffic, parked cars and the planes and helicopters flying overhead. Vehicles take damage and explode; crash a plane and it blows up and throws you out. Ride sheep, cows, pigs, deer, camels, wild goats and bears (bears buck you off). Talk to anyone for gossip, tips or a job. Headbutt trees to drop apples. Bears and wild goats fight back |
-| Multiplayer | Online (server, peer-to-peer, or claude.ai room): see other players' animals, outfits and vehicles live, headbutt them, chat (Enter/T), rooms with invite links, join a friend's mission, visit their open-house property. Local: two-player split-screen |
-| Controls | Keyboard + mouse with rebindable keys, and a full touch layout (stick, look pad, action buttons) |
+| WASD | Move |
+| Mouse | Look |
+| Q / left click | Attack |
+| R / right click | Heavy |
+| E | Special |
+| F | Grab / throw |
+| G | Sound |
+| T | Use, enter a vehicle, start a mission |
+| C | Dodge |
+| Tab | Animals and menus |
+| M | Map |
 
-## Saving
+**Touch:** stick plus context buttons.
 
-When the game runs as a claude.ai artifact it saves to the player's private `db` record (server-side) automatically. Anywhere else, use **Settings → Save & load** to copy a save code or load one from a file. The game never uses browser storage.
+## Saving and accounts
 
-## Code map
+Progress saves in the browser on this device, per local account. Choose "Play as guest" for a throwaway one.
+
+## Files
 
 | File | Role |
 | --- | --- |
-| `js/util.js` | Noise, RNG, geometry merging, spatial hash |
-| `js/data.js` | Animals, vehicles, cosmetics generator, furniture, properties, shops, fish, achievements |
-| `js/world.js` | Terrain, roads and bridges, collision queries, sky, day/night, weather |
-| `js/build.js` | Every region, landmark, interior, collectible and spawn list |
-| `js/models.js` | Procedural animals (with cosmetics), humans, vehicles, collectibles |
-| `js/physics.js` | Dynamic props, explosions, particles, floating text, chaos combos |
-| `js/player.js` | Animal controller, abilities, ragdoll, emotes, camera |
-| `js/npc.js` | Pedestrians, animals, traffic, Animal Control |
-| `js/vehicles.js` | Driving, flying, boating, summoning |
-| `js/state.js` | Economy, stats, achievements, collectibles, interactions, world events, saving |
-| `js/missions.js` | Mission generation and runtime, fishing |
-| `js/ui.js` | Menus, shops, customization, garage, map, HUD, touch controls |
-| `js/scent.js` | Scentline layer: health, stamina, XP and stats, hunting and bestiary, heavy attacks, sounds, sniffing, hijacking, wanted level and police |
-| `js/arsenal.js` | Scentline's guns and gear, hitscan and rockets, vehicle weapon upgrades, tank, fighter jet, starship |
-| `js/places.js` | Dustwater, Frostpeak, raceway and rivals, Fort Grizzle, banks and heists, paw tokens, lake rings, Bramble King, planets and the star map |
-| `js/mayhem.js` | Gadgets, vehicle damage, air traffic, riding, talking, tree shaking |
-| `js/net.js` | Online multiplayer: server and claude.ai-room transports, remote players, chat, name tags |
-| `js/main.js` | Boot, input, game loop, split-screen |
-| `server/server.js` | Static host + WebSocket relay (rooms of up to 24, 20 Hz batched state, rate limits) |
+| `index.html` | The whole game. Scentline's engine first, then the "HOOFQUAKE, MERGED INTO SCENTLINE" script block at the end, which adds the animals, vehicles, Bleatsburg, ducks, missions and the Missions tab |
+| `vendor/three.r128.min.js` | Offline fallback for Three.js r128 (MIT, see `vendor/THREE-LICENSE`) |

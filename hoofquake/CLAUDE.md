@@ -1,6 +1,6 @@
-# CLAUDE.md — Hoofquake
+# CLAUDE.md — Scentline × Hoofquake
 
-Hoofquake is an open-world 3D animal sandbox: `index.html` plus plain scripts in `js/` (Three.js `0.149.0` and PeerJS `1.5.5` from jsDelivr, with copies in `vendor/` as fallback), procedural art, no build step. Player docs and a code map are in [`README.md`](README.md). Live at https://zanetitusgallagher-jesus.github.io/vector-game/hoofquake/.
+One game: Scentline is the base (world, engine, controls, online play), with Hoofquake's animals, vehicles, Bleatsburg city, rubber ducks and missions merged into it. Everything lives in `index.html`. Three.js r128 comes from cdnjs, with a copy in `vendor/` as the fallback. Online play is peer-to-peer (trystero over public relays), so there's no server. Player docs are in [`README.md`](README.md). Live at https://zanetitusgallagher-jesus.github.io/vector-game/hoofquake/.
 
 ## Ground rules (the repo is shared)
 
@@ -11,9 +11,8 @@ Hoofquake is an open-world 3D animal sandbox: `index.html` plus plain scripts in
 
 ## Testing
 
-- `npx http-server hoofquake -p 8080` from the repo root (peer-to-peer online play), or `cd hoofquake/server && npm install && npm start` (WebSocket server online play).
-- `?broker=host:port` points peer-to-peer play at a local PeerJS broker for tests.
-- Automation hooks: everything hangs off `window.H` (`H.players`, `H.Net`, `H.missions`, …).
+- `npx http-server hoofquake -p 8080` from the repo root, then "Play as guest".
+- The Hoofquake additions are the last `<script>` block in `index.html` (search for `HOOFQUAKE, MERGED INTO SCENTLINE`). They extend Scentline's globals (`ANIMALS`, `BODY`, `VD`, `CITIES`, `ROAD`, `TABS`, `MENU`) and wrap `buildAnimal`, `actSpecial`, `buildRegions`, `spawnWorldLife` and `simulate`. The state is in `HQ`, and the missions are in `HQM`.
 
 ## Publishing (both branches)
 
