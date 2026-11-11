@@ -718,7 +718,7 @@ function refreshEnvMap(force) {
 const _sc2 = new THREE.Vector3();
 const lin = (a) => [Math.pow(a[0], 2.2), Math.pow(a[1], 2.2), Math.pow(a[2], 2.2)];
 function updateEnv(dt) {
-  ENV.t = (ENV.t + dt / ENV.dayLen) % 1; ENV.nextWx -= dt;
+  ENV.t = 0.25; /* always daytime (midday) */ ENV.nextWx -= dt;
   if (ENV.nextWx < 0) { ENV.nextWx = rand(120, 300); ENV.rainTarget = Math.random() < 0.4 ? rand(0.45, 1) : 0; }
   ENV.rain = lerp(ENV.rain, ENV.rainTarget, 1 - Math.exp(-dt * 0.25)); ENV.overcast = lerp(ENV.overcast, Math.max(ENV.rainTarget, 0.1 + 0.15 * vnoise(G.time * 0.01, 3)), 1 - Math.exp(-dt * 0.2));
   const h = (6 + ENV.t * 24) % 24, ang = (h - 6) / 12 * Math.PI, sunH = Math.sin(ang);
@@ -2509,9 +2509,9 @@ function buildMilitaryBase() {
   const hang = (cu, cw, w, d, h) => { box(cu - w / 2, cu + w / 2, 0, h, cw + d / 2 - 1, cw + d / 2, CON); box(cu - w / 2, cu - w / 2 + 1, 0, h, cw - d / 2, cw + d / 2, CON); box(cu + w / 2 - 1, cu + w / 2, 0, h, cw - d / 2, cw + d / 2, CON); box(cu - w / 2 - 1, cu + w / 2 + 1, h, h + 1, cw - d / 2 - 1, cw + d / 2 + 1, OL, false); box(cu - w / 2, cu + w / 2, 0, 0.1, cw - d / 2, cw + d / 2, '#55584f', false); };
   hang(-45, -2, 40, 24, 9); hang(48, -2, 38, 18, 5.5);
   // compound buildings
-  box(-30, -10, 0, 5, 50, 62, '#7d806f'); box(-31, -9, 5, 5.6, 49, 63, DK, false); for (let i = 0; i < 5; i++) { box(-27 + i * 4, -25 + i * 4, 1.4, 3.2, 49.92, 50.0, '#2a3a46', false); }
-  for (const cu of [30, 56]) { box(cu - 9, cu + 9, 0, 4, 54, 64, '#757a68'); box(cu - 9.5, cu + 9.5, 4, 4.5, 53.5, 64.5, OL, false); }
-  box(-70, -50, 0, 4, 28, 38, '#757a68'); box(-71, -49, 4, 4.5, 27, 39, OL, false);
+  // compound buildings: real buildings with doors, so you can walk into every one
+  const hut = (u0, u1, w0, w1, h, wall, name) => { const a = bw(u0, w0), W = u1 - u0, D = w1 - w0; const b = Bld({ name, x0: a.x, z0: a.z, w: W, d: D, h, y, wall, roof: OL, kind: 'shop', doors: [{ s: 'S', at: W / 2, w: 2.4, color: '#3a3f3a' }, { s: 'N', at: W / 2, w: 2.4, color: '#3a3f3a' }] }); furnishOffice(b); finishBuilding(b); b.npcs.push({ role: 'soldier', x: b.cx, z: b.cz, r: 3 }); return b; };
+  hut(-30, -10, 50, 62, 5, '#7d806f', 'Barracks'); hut(21, 39, 54, 64, 4, '#757a68', 'Armory'); hut(47, 65, 54, 64, 4, '#757a68', 'Mess Hall'); hut(-70, -50, 28, 38, 4, '#757a68', 'Command Post');
   for (let i = 0; i < 3; i++) { const p = bw(55 + i * 8, 34); scyl(p.x, y, y + 6, p.z, 3.4, '#a2a690', undefined, true); scyl(p.x, y + 6, y + 6.6, p.z, 3.5, '#6a6f5c', undefined, false); }
   for (let i = 0; i < 7; i++) { const a = -0.9 + i * 0.3, p = bw(Math.sin(a) * 9, 20 + 1.5 * Math.cos(a)); sbox(p.x - 0.9, p.x + 0.9, y, y + 1.1, p.z - 0.5, p.z + 0.5, '#8a7d5a', true); }
   for (let i = 0; i < 6; i++) { const p = bw(-70 + i * 12, 70); sbox(p.x - 0.6, p.x + 0.6, y, y + 1.2, p.z - 0.6, p.z + 0.6, '#6b7058', true); }
@@ -5233,7 +5233,7 @@ function buildBleatsburg() {
   spawnVehicle('jetski', MARINA.x + 6, MARINA.z + 10, 0, { parked: true }); spawnVehicle('stuntplane', 450 + 30, 520, Math.PI / 2, { parked: true }); spawnVehicle('kart', RACE.x + 20, RACE.z - RACE.R - 4, 0, { parked: true });
 }
 const _buildRegions0 = buildRegions;
-buildRegions = function () { _buildRegions0(); buildBleatsburg(); buildDucks(); };
+buildRegions = function () { _buildRegions0(); buildBleatsburg(); buildDucks(); for (const d of DOORS) d.locked = false; /* every building can be entered */ };
 
 /* ---------- 4. Rubber ducks (Hoofquake's collectible) across the whole map ---------- */
 function duckMesh() {
