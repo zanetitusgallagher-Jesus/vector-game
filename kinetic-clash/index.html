@@ -46,6 +46,16 @@ html,body{margin:0;height:100%;overflow:hidden;background:#05060a;color:var(--in
 .msg{position:absolute;left:50%;top:22%;transform:translateX(-50%);font-size:44px;font-weight:900;letter-spacing:.08em;text-shadow:0 0 18px rgba(0,0,0,.9),0 0 4px #000;white-space:nowrap;text-align:center}
 .cross{position:absolute;left:50%;top:46%;width:6px;height:6px;margin:-3px;border-radius:50%;background:rgba(255,255,255,.7)}
 #enemy{position:absolute;top:12px;right:12px;width:260px;padding:8px 10px;background:var(--panel);border-radius:8px}
+.tut{position:absolute;left:50%;top:150px;transform:translateX(-50%);width:min(560px,92%);padding:12px 16px;background:rgba(6,9,18,.86);border:2px solid rgba(255,255,255,.18);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+.tutH{font-size:12px;font-weight:800;letter-spacing:.2em;margin-bottom:6px}
+.tutRow{display:flex;gap:14px;align-items:center}
+.tutFig{flex:0 0 110px}
+.tutT{font-size:26px;font-weight:900;letter-spacing:.06em;margin-bottom:4px}
+.tutX{font-size:16px;line-height:1.4;color:#e6edf8}
+.tutK{font-size:11px;color:var(--dim);margin-top:6px}
+.tutBar{height:6px;background:rgba(255,255,255,.1);border-radius:3px;margin-top:8px;overflow:hidden}.tutBar i{display:block;height:100%;width:0;background:#3f6;transition:width .1s}
+.moves{position:absolute;top:150px;width:min(300px,44%);padding:8px 10px;background:rgba(6,9,18,.72);border-radius:8px;font-size:11.5px;line-height:1.55;color:#dfe7f3}
+#h0 .moves{left:12px}#h1 .moves{right:12px}.moves b{color:#fff}
 #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none}
 .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .screen.dim{background:radial-gradient(ellipse at center,rgba(5,6,14,.35),rgba(5,6,14,.88))}
@@ -101,6 +111,7 @@ button.alt{border-color:#ff5a6e;background:rgba(255,90,110,.12)}
     <button id="bKey1" class="alt">KEYBOARD · 1P vs CPU</button>
     <button id="bKey2" class="alt">KEYBOARD · 2 PLAYERS</button>
   </div>
+  <div class="btns" style="margin-top:12px"><button id="bTut" class="alt" style="font-size:13px;padding:8px 14px"></button></div>
   <div id="camStat" class="sub" style="margin-top:18px"></div>
   <div class="help">
     <b>Body controls</b> — jog in place to run · lean to steer · twist shoulders to look · jump · squat &amp; release for a super jump · fast arm thrust = punch · forearms crossed at face = block · clap overhead = ULTIMATE.<br>
@@ -1229,7 +1240,7 @@ function aimAt(h, maxD = 90, cone = 0.6, speed = 50) {
   return null;
 }
 function throwHeld(h, speed = 50) {
-  const p = h.held; if (!p) return; h.held = null;
+  const p = h.held; if (!p) return; h.held = null; h.didThrow = true;
   const tgt = aimAt(h, 100, 0.4, speed);
   const dir = tgt ? tgt.sub(p.pos).normalize() : h.fwd.clone().setY(0.08).normalize();
   p.vel.copy(dir).multiplyScalar(speed); p.state = 'dynamic'; p.thrown = true; p.thrower = h; p.throwT = 0.8; p.w.set(rand(-5, 5), rand(-5, 5), rand(-5, 5));
@@ -1241,6 +1252,7 @@ function nearestBuildingInfo(h, maxD) { return nearestBuilding(h.pos, maxD, b =>
 // ---------------- per-hero powers
 function usePower(h, k, I) {
   if (h.cd[k] > 0) return false;
+  (h.tried || (h.tried = []))[k] = true;
   const id = h.def.id, e = h.enemy, f = h.fwd, P = h.def.powers[k];
   let used = true;
   if (id === 'tk') {
@@ -1292,7 +1304,7 @@ function groundPound(h, R, power) {
   for (const p of props) { if (p.state === 'dead' || p.state === 'held') continue; const d = p.pos.distanceTo(c); if (d < R) damageProp(p, 10 * power, h, tmpV.copy(p.pos).sub(c).setY(0).normalize().multiplyScalar(8).setY(rand(10, 18) * (1 - d / R) * p.mass)); }
 }
 function superJump(h, charge) {
-  charge = clamp(charge, 0, 1.2);
+  charge = clamp(charge, 0, 1.2); h.didSuper = true;
   if (h.def.id === 'ti') { h.vel.y = 18 + 20 * charge; h.vel.addScaledVector(h.fwd, 14 + 22 * charge); h.leaping = true; h.say('MEGA LEAP'); }
   else { h.vel.y = 15 + 13 * charge; }
   h.onGround = false; AU.play('jump'); fx('dust', h.pos.clone(), 10, 2.5, 6); fx('ring', h.pos.clone(), 2, h.def.acc, 30);
@@ -1323,10 +1335,16 @@ function shootThread(h, k) {
     const y = vel + side * yo, dir = new V3(Math.sin(y) * Math.cos(el), Math.sin(el), Math.cos(y) * Math.cos(el));
     hit = rayBuildings(origin, dir, 75); if (hit && hit.p.y > h.pos.y + 3) break; hit = null;
   }
+  if (!hit) { // nothing where you aimed: grab the nearest building surface within a wide arc
+    let best = null;
+    for (let a = -3.1; a <= 3.1; a += 0.17) for (const el of [0.55, 0.85, 1.15]) { const y = vel + side * 0.3 + a, dir = new V3(Math.sin(y) * Math.cos(el), Math.sin(el), Math.cos(y) * Math.cos(el)); const r = rayBuildings(origin, dir, 75); if (r && r.p.y > h.pos.y + 3 && (!best || r.d + Math.abs(a) * 12 < best.d + Math.abs(best.a) * 12)) { best = r; best.a = a; } }
+    hit = best;
+  }
   if (h.threads[k]) h.releaseThreads(false);
   if (!hit) { const y = vel + side * 0.45, dir = new V3(Math.sin(y) * 0.6, 0.8, Math.cos(y) * 0.6); h.miss.push({ dir, t: 0, b: beam(origin, origin, h.def.acc, 0.06, 1, { persist: true }) }); AU.play('retract'); h.say('THREAD MISSED', 0.6); return; }
   for (let j = 0; j < 2; j++) if (j !== k && h.threads[j]) { const b = h.threads[j].beam; b.persist = false; b.life = b.max = 2.6; h.threads[j] = null; }
   const hand = h.handPos(k, new V3());
+  h.threadCount = (h.threadCount || 0) + 1;
   h.threads[k] = { anchor: hit.p.clone(), len: Math.max(6, hit.p.distanceTo(hand) * 0.9), beam: beam(hand, hit.p, h.def.acc, 0.06, 2.6, { persist: true }) };
   fx('sparks', hit.p.clone(), h.def.acc, 14, 6, 0.4); AU.play('zip'); h.onGround = false; if (h.vel.y < 0 && h.pos.y < 2) h.vel.y = 4;
 }
@@ -1389,7 +1407,7 @@ function updateHero(h, I, dt) {
   if (I.ult && h.ult >= 100) doUlt(h);
   const holdRise = [0, 1, 2].map(k => I.hold[k] && !h.lastHolds[k]); h.lastHolds = I.hold.slice();
   if (id === 'tk') {
-    if ((I.pw[0] || (holdRise[0] && !h.held)) && !(I.pw[0] && I.hold[0] && !holdRise[0])) usePower(h, 0, I);
+    if (I.pw[0] || (holdRise[0] && !h.held && !I.keys)) usePower(h, 0, I);
     if (I.punch && h.held && h.held.type !== 'section') { throwHeld(h); I.punch = false; h.cd[0] = 0.6; }
     if (I.pw[1]) usePower(h, 1, I); if (I.pw[2]) usePower(h, 2, I);
   } else if (id === 'st') {
@@ -1404,7 +1422,7 @@ function updateHero(h, I, dt) {
     const arms = [I.arms[0] || (I.hold[0] && h.kbSide === 0), I.arms[1] || (I.hold[0] && h.kbSide === 1)];
     for (let k = 0; k < 2; k++) {
       if (arms[k] && !h.lastArms[k] && h.cd[0] <= 0) { shootThread(h, k); h.cd[0] = def.powers[0].cd; }
-      if (!arms[k] && h.threads[k]) { const t = h.threads[k]; t.beam.persist = false; t.beam.life = t.beam.max = 2.6; h.threads[k] = null; h.vel.multiplyScalar(1.12); h.vel.y += 6; AU.play('whoosh'); }
+      if (!arms[k] && h.threads[k]) { const t = h.threads[k]; t.beam.persist = false; t.beam.life = t.beam.max = 2.6; h.threads[k] = null; h.didFling = true; h.vel.multiplyScalar(1.12); h.vel.y += 6; AU.play('whoosh'); }
     }
     h.lastArms = arms;
     if (I.pw[1]) usePower(h, 1, I); if (I.pw[2]) usePower(h, 2, I);
@@ -1626,6 +1644,138 @@ function animateHero(h, dt, I) {
   m.root.visible = !(h.inv > 0 && Math.sin(simTime * 40) > 0.6);
 }
 
+// ============================================================ §TUTORIAL (guided move-by-move training before the fight)
+// stick-figure pictures of each gesture (viewBox 0..100 x -10..120, drawn like a mirror)
+const FIG = {
+  idle: { a: [[34, 45], [32, 62], [66, 45], [68, 62]] },
+  run: { a: [[32, 40], [38, 30], [68, 46], [62, 56]], l: [[40, 74], [44, 92], [56, 88], [57, 112]], txt: '↕ knees' },
+  lean: { rot: 14, txt: '⟲ ⟳' },
+  jump: { up: 14, a: [[30, 16], [26, 2], [70, 16], [74, 2]], l: [[40, 80], [46, 96], [60, 80], [54, 96]], txt: '⇡' },
+  squat: { sq: 18, l: [[34, 88], [42, 110], [66, 88], [58, 110]], a: [[36, 52], [44, 60], [64, 52], [56, 60]], txt: '⇣ then ⇡' },
+  punch: { a: [[34, 45], [40, 34], [76, 29], [94, 29]], txt: 'fast →', burst: [96, 29] },
+  rapid: { a: [[24, 30], [10, 29], [76, 29], [94, 29]], txt: '× 4 fast', burst: [96, 29] },
+  block: { a: [[34, 40], [58, 14], [66, 40], [42, 14]], txt: '✕' },
+  armsUp: { a: [[32, 14], [34, -4], [68, 14], [66, -4]], txt: 'hold' },
+  clap: { a: [[36, 10], [49, -6], [64, 10], [51, -6]], txt: '👏 clap!', burst: [50, -8] },
+  tpose: { a: [[24, 28], [8, 28], [76, 28], [92, 28]], txt: 'hold 1 s' },
+  point: { a: [[34, 45], [32, 62], [76, 28], [94, 26]], txt: 'hold', burst: [96, 26] },
+  reach: { a: [[34, 45], [32, 62], [74, 30], [90, 32]], txt: 'reach + hold' },
+  bothPush: { a: [[30, 34], [42, 30], [70, 34], [58, 30]], txt: 'both → fast', burst: [50, 30] },
+  slam: { a: [[30, 44], [30, 66], [70, 44], [70, 66]], txt: '⇓ slam', ghost: [[32, 14], [34, -4], [68, 14], [66, -4]] },
+  hug: { a: [[26, 40], [48, 44], [74, 40], [52, 44]], txt: '→ ←', ghost: [[24, 28], [8, 28], [76, 28], [92, 28]] },
+  fling: { a: [[24, 28], [8, 28], [76, 28], [92, 28]], txt: '✕ then ⟷', ghost: [[34, 40], [58, 14], [66, 40], [42, 14]] },
+  armUp: { a: [[34, 45], [32, 62], [70, 14], [80, 0]], txt: '↗ at a building' },
+  armDown: { a: [[34, 45], [32, 62], [66, 45], [68, 62]], txt: 'drop arm', ghost: [[34, 45], [32, 62], [70, 14], [80, 0]] },
+  otherArm: { a: [[30, 14], [20, 0], [66, 45], [68, 62]], txt: 'other arm ↖' },
+  spin: { a: [[34, 45], [32, 62], [66, 45], [68, 62]], txt: '↻ turn around' },
+  planeTilt: { a: [[24, 22], [8, 16], [76, 34], [92, 40]], rot: 8, txt: 'lean / tilt' },
+};
+function figSVG(name, col) {
+  const f = { ...FIG.idle, ...FIG[name] }, up = f.up || 0, sq = f.sq || 0;
+  const L = f.l || [[44, 86], [44, 110], [56, 86], [56, 110]];
+  const y = v => v - up + sq;
+  const line = (a, b, w = 5, c = col, o = 1) => `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${c}" stroke-width="${w}" stroke-linecap="round" opacity="${o}"/>`;
+  const sh = [[38, y(28)], [62, y(28)]], hip = [50, y(62) + (sq ? 0 : 0)], neck = [50, y(24)];
+  const A = f.a.map(p => [p[0], y(p[1])]);
+  let g = '';
+  if (f.ghost) { const G = f.ghost.map(p => [p[0], y(p[1])]); g += line(sh[0], G[0], 4, col, 0.25) + line(G[0], G[1], 4, col, 0.25) + line(sh[1], G[2], 4, col, 0.25) + line(G[2], G[3], 4, col, 0.25); }
+  let upper = line(neck, hip) + line(sh[0], sh[1]) + line(sh[0], A[0]) + line(A[0], A[1]) + line(sh[1], A[2]) + line(A[2], A[3]) + `<circle cx="50" cy="${y(13)}" r="8" fill="none" stroke="${col}" stroke-width="5"/>` + g;
+  if (f.rot) upper = `<g transform="rotate(${f.rot} ${hip[0]} ${hip[1]})">${upper}</g>` + `<g opacity=".3" transform="rotate(${-f.rot} ${hip[0]} ${hip[1]})">${upper.replace(/<g[^>]*>|<\/g>/g, '')}</g>`;
+  const legs = [[[44, hip[1]], [L[0][0], L[0][1] - up]], [[L[0][0], L[0][1] - up], [L[1][0], L[1][1] - up]], [[56, hip[1]], [L[2][0], L[2][1] - up]], [[L[2][0], L[2][1] - up], [L[3][0], L[3][1] - up]]].map(([a, b]) => line(a, b)).join('');
+  const burst = f.burst ? `<circle cx="${f.burst[0]}" cy="${y(f.burst[1])}" r="7" fill="#fff" opacity=".85"/>` : '';
+  return `<svg viewBox="-4 -14 108 134" width="110" height="136"><line x1="10" y1="113" x2="90" y2="113" stroke="#fff" stroke-opacity=".25" stroke-width="2"/>${legs}${upper}${burst}<text x="50" y="128" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">${f.txt || ''}</text></svg>`;
+}
+// keys per player for the keyboard version of each instruction
+const KT = [{ run: 'W', steer: 'A / D', jump: 'Space', crouch: 'C', punch: 'F', block: 'V', p: ['Q', 'E', 'R'], ult: 'T' }, { run: '↑', steer: '← / →', jump: 'Enter', crouch: 'Right Shift', punch: 'L', block: 'K', p: ['I', 'O', 'P'], ult: 'U' }];
+const acc = (st, on, dt, need) => (st.a = (st.a || 0) + (on ? dt : 0)) >= need;
+function tutSteps(h, i) {
+  const k = KT[i], id = h.def.id;
+  const S = [
+    { t: 'RUN', fig: 'run', cam: 'Jog in place — lift your knees high. Jog faster to run faster.', key: `Hold ${k.run}`, s: 'jog in place', chk: (h, I, st, dt) => acc(st, I.move > 0.4, dt, 1.5) },
+    { t: 'STEER', fig: 'lean', cam: 'While jogging, lean your upper body left or right to turn. Twist your shoulders to look around.', key: `${k.steer} to turn`, s: 'lean left / right', chk: (h, I, st, dt) => acc(st, Math.abs(I.turn) > 0.4, dt, 1) },
+    { t: 'JUMP', fig: 'jump', cam: 'Do a real jump — both feet off the floor.', key: `Press ${k.jump}`, s: 'real jump', chk: (h, I) => I.jump },
+    { t: id === 'ti' ? 'MEGA LEAP' : 'SUPER JUMP', fig: 'squat', cam: 'Squat down, hold for a second, then stand up fast to launch high.' + (id === 'ti' ? ' Bulwark leaps across whole blocks!' : ''), key: `Hold ${k.crouch}, then let go`, s: 'squat, then stand up', chk: h => h.didSuper },
+    { t: 'PUNCH', fig: 'punch', cam: 'Throw a fast punch straight at the screen. Up close, a hard punch sends them flying.', key: `Press ${k.punch}`, s: 'fast punch at the screen', chk: (h, I) => I.punch },
+    { t: 'BLOCK', fig: 'block', cam: 'Cross your forearms in front of your face and hold.', key: `Hold ${k.block}`, s: 'forearms crossed at face', chk: (h, I, st, dt) => acc(st, h.block, dt, 0.6) },
+    { t: 'CLIMB', fig: 'run', cam: 'Steer toward a building and keep jogging straight into its wall — you run right up it onto the roof.', key: `Steer at a building, hold ${k.run}`, s: 'run into a wall', chk: (h, I, st, dt) => acc(st, h.wallRun, dt, 0.4) || h.pos.y > 6 },
+  ];
+  const P = (n, fig, cam, kk, s, chk) => S.push({ t: n, fig, cam, key: kk, s, chk });
+  const tried = j => h => h.tried && h.tried[j];
+  if (id === 'tk') {
+    P('LIFT', 'reach', 'Reach ONE arm straight out toward a car or lamppost and hold it there — it floats up.', `Press ${k.p[0]}`, 'reach one arm + hold', h => !!h.held || h.didThrow);
+    P('THROW', 'punch', 'Pull that hand back, then push it forward fast to hurl the object.', `Press ${k.p[0]} again`, 'push forward fast', h => h.didThrow);
+    P('SHOCKWAVE', 'bothPush', 'Push BOTH hands forward fast at the same time.', `Press ${k.p[1]}`, 'both hands push', tried(1));
+    P('ROCK SHIELD', 'armsUp', 'Raise both arms above your head and hold for half a second.', `Press ${k.p[2]}`, 'both arms overhead', tried(2));
+  } else if (id === 'sp') {
+    P('BLUR COMBO', 'rapid', 'Punch 4 times in a row, really fast.', `Press ${k.p[0]}`, '4 fast punches', tried(0));
+    P('TORNADO', 'spin', 'Spin your whole body around once (turn your back to the camera and come back).', `Press ${k.p[1]}`, 'spin around once', tried(1));
+    P('SONIC BOOM', 'bothPush', 'Push BOTH hands forward fast at the same time.', `Press ${k.p[2]}`, 'both hands push', tried(2));
+  } else if (id === 'ti') {
+    P('GROUND POUND', 'slam', 'Raise both arms up high, then slam them down fast.', `Press ${k.p[0]}`, 'arms up, slam down', tried(0));
+    P('GRAB & THROW', 'hug', 'Spread your arms wide, then hug them in to your chest. Near the enemy you grab and throw them; otherwise you grab a car.', `Press ${k.p[1]}`, 'wide, then hug in', tried(1));
+  } else if (id === 'st') {
+    P('LIGHTNING BOLT', 'point', 'Point one arm straight out and hold it — bolts fire where you point.', `Press ${k.p[0]}`, 'point one arm', tried(0));
+    P('LIGHTNING STORM', 'armsUp', 'Raise both arms above your head and hold for half a second.', `Press ${k.p[1]}`, 'both arms overhead', tried(1));
+    P('TAKE OFF', 'tpose', 'Arms straight out to the sides like a plane. Hold for 1 second.', `Press ${k.p[2]}`, 'plane arms, hold 1 s', h => h.flying);
+    P('FLY', 'planeTilt', 'Keep your arms out. Lean to turn. Tilt your arms up to climb, down to dive.', `${k.steer} turn · ${k.jump} up · ${k.crouch} down`, 'lean = turn, tilt arms = up/down', (h, I, st, dt) => acc(st, h.flying, dt, 3));
+    P('LAND', 'armDown', 'Drop both arms to your sides to stop flying.', `Press ${k.p[2]}`, 'drop arms', h => !h.flying);
+  } else if (id === 'th') {
+    P('SHOOT A THREAD', 'armUp', 'Throw one arm UP and forward toward a tall building. A glowing thread sticks to it. (Face the buildings, not open sky.)', `Hold ${k.p[0]}`, 'one arm up at a building', h => !!(h.threads[0] || h.threads[1]));
+    P('SWING', 'armUp', 'Keep that arm raised — you swing like a pendulum. Jog while swinging to go faster.', `Keep holding ${k.p[0]}`, 'keep arm raised', (h, I, st, dt) => acc(st, !!(h.threads[0] || h.threads[1]), dt, 1.2));
+    P('LET GO', 'armDown', 'Drop your arm to let go — you fling forward with all that speed.', `Release ${k.p[0]}`, 'drop arm to fling', h => h.didFling);
+    P('CHAIN SWINGS', 'otherArm', 'Raise the OTHER arm to grab the next building. Alternate arms to travel fast.', `Tap ${k.p[0]} again (switches arm)`, 'alternate arms', h => (h.threadCount || 0) >= 2);
+    P('THREAD YANK', 'bothPush', 'Thrust BOTH arms at the enemy to yank them to you.', `Press ${k.p[1]}`, 'both arms thrust at enemy', tried(1));
+    P('THREAD NET', 'fling', 'Cross your arms in front of you, then fling them wide open. Pins the enemy to a wall.', `Press ${k.p[2]}`, 'cross, then fling wide', tried(2));
+  }
+  S.push({ t: 'ULTIMATE', fig: 'clap', cam: `Hitting the enemy fills your ★ meter. When it's full, CLAP YOUR HANDS OVERHEAD for ${h.def.ultN}! (We filled it for you.)`, key: `Press ${k.ult}`, s: 'clap overhead (★ full)', pre: h => { h.ult = 100; }, chk: h => h.ult < 50 });
+  return S;
+}
+const TUT = { on: (() => { try { return localStorage.getItem('kc_tut') !== '0'; } catch (e) { return true; } })(), p: [] };
+function initTutorial() {
+  TUT.p = [0, 1].map(i => {
+    const h = heroes[i]; h.tried = []; h.didSuper = h.didThrow = h.didFling = false; h.threadCount = 0;
+    if (GAME.ctl[i] === 'cpu') return { done: true };
+    return { steps: tutSteps(h, i), n: 0, st: {}, ok: 0, time: 0, done: false };
+  });
+  TUT.p.forEach((t, i) => { if (!t.done && t.steps[0].pre) t.steps[0].pre(heroes[i]); });
+}
+function updateTutorial(dt) {
+  let all = true;
+  for (let i = 0; i < 2; i++) {
+    const t = TUT.p[i], U = HUD[i], h = heroes[i]; if (!U) continue;
+    const el = U.tut;
+    if (t.done) { if (GAME.ctl[i] !== 'cpu') { el.classList.remove('hidden'); el.innerHTML = '<div class="tutT" style="font-size:30px">✔ TRAINING COMPLETE</div><div class="tutX">Waiting for the other player…</div>'; } else el.classList.add('hidden'); continue; }
+    all = false;
+    const S = t.steps[t.n]; t.time += dt;
+    const pose = GAME.ctl[i] === 'pose';
+    if (t.ok > 0) { t.ok -= dt; if (t.ok <= 0) next(i); }
+    else if (S.chk(h, h.lastI || blankIntent(), t.st, dt)) { t.ok = 0.9; AU.play('select'); fx('burst', h.chest(), h.def.acc, 30, 8); }
+    if (KEDGE.has('Tab') || t.time > 25) next(i, true);
+    const col = i ? '#ff5a6e' : '#33e0ff';
+    const key = `${t.n}|${t.ok > 0}|${pose}|${t.time > 12}`;
+    if (el.dataset.k !== key) {
+      el.dataset.k = key; el.classList.remove('hidden');
+      el.innerHTML = `<div class="tutH" style="color:${col}">TRAINING · STEP ${t.n + 1} / ${t.steps.length}</div>
+        <div class="tutRow"><div class="tutFig">${figSVG(S.fig, col)}</div><div><div class="tutT">${t.ok > 0 ? '✔ NICE!' : S.t}</div>
+        <div class="tutX">${pose ? S.cam : S.key}</div>${pose ? `<div class="tutK">keyboard: ${S.key}</div>` : ''}</div></div>
+        <div class="tutBar"><i></i></div><div class="tutK">${t.time > 12 ? 'Having trouble? Press TAB to skip this step (auto-skips at 25 s) · ' : ''}Backspace = skip all training</div>`;
+    }
+    const bar = el.querySelector('.tutBar i'); if (bar) bar.style.width = (t.ok > 0 ? 100 : Math.min(100, (t.st.a || 0) / 1.5 * 100)) + '%';
+  }
+  if (KEDGE.has('Backspace')) all = true;
+  if (all) { HUD.forEach(U => U.tut.classList.add('hidden')); beginFight(); }
+}
+function next(i, skipped) {
+  const t = TUT.p[i]; t.n++; t.st = {}; t.ok = 0; t.time = 0;
+  while (t.n < t.steps.length && t.steps[t.n].opt && skipped === 'never') t.n++;
+  if (t.n >= t.steps.length) { t.done = true; return; }
+  if (t.steps[t.n].pre) t.steps[t.n].pre(heroes[i]);
+}
+function movesHTML(h, i) {
+  const pose = GAME.ctl[i] === 'pose', S = tutSteps(h, i).filter(s => !['STEER', 'CLIMB', 'SWING', 'LET GO', 'FLY', 'LAND', 'THROW'].includes(s.t));
+  return `<div class="tutH">MOVES · ${h.def.name} <span style="opacity:.6">(H to hide)</span></div>` + S.map(s => `<div><b>${s.t}</b> — ${pose ? s.s : s.key}</div>`).join('');
+}
+
 // ============================================================ §GAME FLOW
 const GAME = { state: 'title', camMode: false, humans: 2, ctl: ['keys', 'cpu'], picks: [-1, -1], solo: false, t: 0, countT: 0, winner: null, replayData: null };
 const CAL = { active: false };
@@ -1647,10 +1797,10 @@ function buildHUD() {
       <div class="panel" style="border-color:${col}"><div class="name"><span style="color:${col}">P${i + 1} ${GAME.ctl[i] === 'cpu' ? 'CPU · ' : ''}${h.def.name}</span><span class="score">0 / ${CFG.winKOs}</span></div>
       <div class="bar hp"><i style="width:100%"></i></div><div class="bar ult"><i style="width:0%"></i></div>
       <div class="pows">${h.def.powers.map(p => `<div class="pow"><b></b>${p.i}<small>${p.n}</small></div>`).join('')}<div class="pow ultp"><b></b>★<small>ULT</small></div></div></div>
-      <canvas class="cam" width="176" height="132"></canvas><div class="dot"></div>
+      <div class="tut hidden"></div><div class="moves hidden"></div><canvas class="cam" width="176" height="132"></canvas><div class="dot"></div>
       <div class="arrow hidden"></div><div class="arrowd hidden"></div><div class="warn hidden"></div><div class="dbg hidden"></div><div class="msg"></div>`;
     hud.appendChild(half);
-    HUD.push({ half, score: half.querySelector('.score'), hp: half.querySelector('.hp i'), hpBar: half.querySelector('.hp'), ult: half.querySelector('.ult i'), ultBar: half.querySelector('.ult'), pows: [...half.querySelectorAll('.pow')], cam: half.querySelector('.cam'), dot: half.querySelector('.dot'), arrow: half.querySelector('.arrow'), arrowd: half.querySelector('.arrowd'), warn: half.querySelector('.warn'), dbg: half.querySelector('.dbg'), msg: half.querySelector('.msg'), tint: half.querySelector('.tint') });
+    HUD.push({ half, score: half.querySelector('.score'), hp: half.querySelector('.hp i'), hpBar: half.querySelector('.hp'), ult: half.querySelector('.ult i'), ultBar: half.querySelector('.ult'), pows: [...half.querySelectorAll('.pow')], cam: half.querySelector('.cam'), dot: half.querySelector('.dot'), arrow: half.querySelector('.arrow'), arrowd: half.querySelector('.arrowd'), warn: half.querySelector('.warn'), dbg: half.querySelector('.dbg'), msg: half.querySelector('.msg'), tut: half.querySelector('.tut'), moves: half.querySelector('.moves'), tint: half.querySelector('.tint') });
   }
   if (!GAME.solo) { const d = document.createElement('div'); d.id = 'divider'; hud.appendChild(d); }
   else { const e = document.createElement('div'); e.id = 'enemy'; e.innerHTML = `<div class="name"><span style="color:var(--p1)">CPU · ${heroes[1].def.name}</span><span class="score" id="escore">0</span></div><div class="bar hp"><i id="ehp" style="width:100%"></i></div>`; hud.appendChild(e); }
@@ -1674,6 +1824,7 @@ function updateHUD() {
     let warn = '';
     if (pose && POSE.ready) { if (!s.tracked) warn = 'PLAYER ' + (i + 1) + ' NOT DETECTED<br><small>stand in your half of the camera</small>'; else if (!s.g.feet) warn = '⚠ STEP BACK<br><small>feet must be visible to run &amp; jump</small>'; }
     U.warn.innerHTML = warn; U.warn.classList.toggle('hidden', !warn);
+    const mv = (GAME.state === 'match' || GAME.state === 'countdown') && GAME.movesT > 0; U.moves.classList.toggle('hidden', !mv); if (mv && !U.moves.dataset.on) { U.moves.innerHTML = movesHTML(h, i); U.moves.dataset.on = 1; }
     U.dbg.classList.toggle('hidden', !DEBUG);
     if (DEBUG) U.dbg.textContent = (pose ? (s.g.label + (s.g.lastEv && performance.now() - s.g.lastEvT < 1500 ? '\n▶ ' + s.g.lastEv.toUpperCase() : '')) : (GAME.ctl[i] === 'cpu' ? 'CPU' : 'KEYBOARD')) + `\npose ${POSE.fps} fps · people ${POSE.count}`;
     let msg = h.msgT > 0 ? h.msg : (h.ult >= 100 ? (pose ? '★ ULTIMATE READY — CLAP OVERHEAD' : '★ ULTIMATE READY (' + (i ? 'U' : 'T') + ')') : '');
@@ -1824,7 +1975,7 @@ function startMatch() {
   spawnHero(heroes[0], new V3(-city.half + S / 2 + PITCH, 0, -city.half + S / 2 + PITCH)); spawnHero(heroes[1], new V3(city.half - S / 2 - PITCH, 0, city.half - S / 2 - PITCH * 2));
   camState.forEach(c => c.init = false);
   viewsPass.views = GAME.solo ? [{ cam: cams[0], x: 0, y: 0, w: 1, h: 1 }] : [{ cam: cams[0], x: 0, y: 0, w: 0.5, h: 1 }, { cam: cams[1], x: 0.5, y: 0, w: 0.5, h: 1 }];
-  buildHUD(); GAME.state = 'countdown'; GAME.countT = 3.5; GAME.matchT = 0; fxLog.length = 0; REC.length = 0; simTime = 0; setDay(0);
+  buildHUD(); GAME.state = TUT.on ? 'tutorial' : 'countdown'; if (TUT.on) { initTutorial(); showBanner('TRAINING', 1.5); } GAME.countT = 3.5; GAME.matchT = 0; fxLog.length = 0; REC.length = 0; simTime = 0; setDay(0);
   for (const s of POSE.slots) takeEvents(s);
 }
 // ---------- final KO + replay
@@ -1838,6 +1989,12 @@ function snapshot() {
 function applySnap(s) {
   s.h.forEach((x, i) => { const h = heroes[i]; if (!x || !h) return; h.pos.fromArray(x.p); h.model.root.rotation.y = x.y; h.model.joints.forEach((j, k) => j.quaternion.fromArray(x.j[k])); h.model.hips.position.y = x.hy; h.model.root.visible = true; h.blob.position.set(h.pos.x, roofAt(h.pos.x, h.pos.z, h.pos.y + 0.2) + 0.08, h.pos.z); });
   for (const r of s.pr) { const p = props[r[0]]; if (!p) continue; p.pos.set(r[1], r[2], r[3]); p.mesh.quaternion.set(r[4], r[5], r[6], r[7]); p.mesh.visible = true; }
+}
+function beginFight() {
+  heroes.forEach((h, i) => { h.score = 0; h.ult = 0; h.cd = [0, 0, 0]; h.held = null; h.flying = false; h.storm = h.tornado = h.quake = h.skyfall = h.barrage = h.blur = h.net = null; });
+  WORLD.slowT = 0; WORLD.slowOwner = null;
+  spawnHero(heroes[0], new V3(-city.half + S / 2 + PITCH, 0, -city.half + S / 2 + PITCH)); spawnHero(heroes[1], new V3(city.half - S / 2 - PITCH, 0, city.half - S / 2 - PITCH * 2));
+  GAME.state = 'countdown'; GAME.countT = 3.5; GAME.matchT = 0; GAME.movesT = 25;
 }
 function finalKO(winner, loser) {
   GAME.state = 'koFinal'; GAME.winner = winner; GAME.loser = loser; GAME.koT = 2.2; WORLD.cineT = 2.2;
@@ -1866,6 +2023,8 @@ function toWinner() {
 }
 $('bCam').onclick = () => startCamMode(1);
 $('bCam2').onclick = () => startCamMode(2);
+const tutBtn = () => { $('bTut').textContent = 'TRAINING BEFORE EACH MATCH: ' + (TUT.on ? 'ON' : 'OFF'); };
+$('bTut').onclick = () => { TUT.on = !TUT.on; try { localStorage.setItem('kc_tut', TUT.on ? '1' : '0'); } catch (e) { } tutBtn(); }; tutBtn();
 $('bKey1').onclick = () => { AU.init(); GAME.camMode = false; GAME.humans = 1; GAME.forceP2 = false; toSelect(); };
 $('bKey2').onclick = () => { AU.init(); GAME.camMode = false; GAME.humans = 2; toSelect(); };
 $('bAgain').onclick = () => { GAME.forceP2 = false; toSelect(); };
@@ -1884,7 +2043,8 @@ function stepMatch(dt) {
     if (GAME.ctl[i] === 'cpu') I = cpuIntent(h, worldDt);
     else { keyIntent(i, I); if (GAME.ctl[i] === 'pose') poseIntent(POSE.slots[i], h, I); }
     if (INJ[i]) { Object.assign(I, INJ[i]); INJ[i] = null; }
-    if (GAME.state !== 'match') I = blankIntent();
+    if (GAME.state !== 'match' && !(GAME.state === 'tutorial' && GAME.ctl[i] !== 'cpu')) I = blankIntent();
+    h.lastI = I;
     const hdt = WORLD.slowT > 0 && WORLD.slowOwner === h ? dt * cine : worldDt;
     updateHero(h, I, hdt);
   }
@@ -1908,7 +2068,8 @@ function frame(now) {
     stepMatch(dt); updateChaseCam(0, dt); updateChaseCam(1, dt); updateHUD();
     if (GAME.countT <= 0) GAME.state = 'match';
   }
-  else if (st === 'match') { stepMatch(dt); updateChaseCam(0, dt); updateChaseCam(1, dt); updateHUD(); }
+  else if (st === 'tutorial') { stepMatch(dt); updateChaseCam(0, dt); updateChaseCam(1, dt); updateHUD(); if (GAME.state === 'tutorial') updateTutorial(dt); }
+  else if (st === 'match') { if (KEDGE.has('KeyH')) GAME.movesT = GAME.movesT > 0 ? 0 : 1e9; GAME.movesT -= dt; stepMatch(dt); updateChaseCam(0, dt); updateChaseCam(1, dt); updateHUD(); }
   else if (st === 'koFinal') { stepMatch(dt); updateChaseCam(0, dt); updateChaseCam(1, dt); updateHUD(); GAME.koT -= dt; if (GAME.koT <= 0) startReplay(); }
   else if (st === 'replay') { updateReplay(dt); updateDebris(dt * 0.5); glow.update(dt * 0.5); dust.update(dt * 0.5); updateBeams(dt * 0.5); if (KEDGE.has('Enter') || KEDGE.has('Space')) { replaying = false; toWinner(); } }
   else if (st === 'winner') {
@@ -1923,7 +2084,7 @@ function frame(now) {
 // ---------- boot
 buildCity(); populateProps(); setDay(0.35);
 viewsPass.views = [{ cam: menuCam, x: 0, y: 0, w: 1, h: 1 }];
-window.__KC = { INJ, step: (n, dt = 1 / 60) => { for (let k = 0; k < n; k++) { if (GAME.state === 'countdown') GAME.state = 'match'; stepMatch(dt); } }, GAME, heroes, props, city, POSE, HEROES, startMatch, toSelect, pickHero, doUlt, usePower, WORLD };
+window.__KC = { shootThread, rayBuildings, TUT, updateTutorial, INJ, step: (n, dt = 1 / 60) => { for (let k = 0; k < n; k++) { if (GAME.state === 'countdown') GAME.state = 'match'; stepMatch(dt); } }, GAME, heroes, props, city, POSE, HEROES, startMatch, toSelect, pickHero, doUlt, usePower, WORLD };
 requestAnimationFrame(frame);
 </script>
 </body>
