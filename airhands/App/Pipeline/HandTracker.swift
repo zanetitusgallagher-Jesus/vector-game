@@ -64,7 +64,7 @@ final class HandTracker {
 
         // Vision's chirality names the person's actual hand; mirroring the image for display
         // does not change which hand it is, so it is passed through unchanged.
-        let chirality: Chirality = switch obs.chirality {
+        let chirality: AirHandsCore.Chirality = switch obs.chirality {
         case .left: .left
         case .right: .right
         default: .unknown
