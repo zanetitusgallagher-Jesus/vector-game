@@ -96,7 +96,8 @@ button.alt{border-color:#ff5a6e;background:rgba(255,90,110,.12)}
   <h1 class="logo">KINETIC CLASH</h1>
   <div class="sub">FULL-BODY SUPERHERO CITY BATTLE</div>
   <div class="btns">
-    <button id="bCam">▶ PLAY WITH CAMERA</button>
+    <button id="bCam2">▶ CAMERA · 2 PLAYERS (SPLIT SCREEN)</button>
+    <button id="bCam">▶ CAMERA · 1P vs CPU</button>
     <button id="bKey1" class="alt">KEYBOARD · 1P vs CPU</button>
     <button id="bKey2" class="alt">KEYBOARD · 2 PLAYERS</button>
   </div>
@@ -1732,8 +1733,8 @@ function endMatchCleanup() {
   for (let i = 0; i < 2; i++) if (heroes[i]) { heroes[i].dispose(); heroes[i] = null; }
   for (const b of beams) killBeam(b); glow.clear(); dust.clear(); WORLD = { slowOwner: null, slowT: 0, cineT: 0 };
 }
-async function startCamMode() {
-  AU.init(); GAME.camMode = true; toSelect();
+async function startCamMode(n) {
+  AU.init(); GAME.camMode = true; GAME.camForce = n; GAME.forceP2 = false; toSelect();
   const ok = await startPose(); if (!ok) { GAME.camMode = false; $('selSub').textContent = POSE.err + ' Keyboard: P1 A/D + Space · P2 ←/→ + Enter'; }
 }
 function toSelect() {
@@ -1750,8 +1751,8 @@ function toSelect() {
 function pickHero(p, i) { if (GAME.picks[p] >= 0) return; GAME.picks[p] = i; AU.play('select'); }
 function updateSelect(dt) {
   // decide humans: camera → number of people seen; keyboard → chosen mode
-  if (GAME.camMode) { GAME.peopleSeen = Math.max(POSE.count, GAME.peopleSeen * 0.995); GAME.humans = POSE.count >= 2 || GAME.peopleSeen > 1.5 ? 2 : 1; if (KEDGE.has('Enter') || KEDGE.has('KeyL') || KEDGE.has('ArrowLeft') || KEDGE.has('ArrowRight')) GAME.forceP2 = true; if (GAME.forceP2) GAME.humans = 2; }
-  $('selSub').textContent = GAME.camMode ? (POSE.ready ? (GAME.humans === 2 ? '2 PLAYERS DETECTED — each hover a raised hand over a card for 2 s' : '1 PLAYER DETECTED — you will fight a CPU hero · hover a raised hand over a card for 2 s') : 'Loading body tracking… (keyboard: P1 A/D + Space · P2 ←/→ + Enter)') : (GAME.humans === 2 ? 'P1: A / D then Space · P2: ← / → then Enter · or click' : 'A / D then Space (or click) · CPU picks a rival');
+  if (GAME.camMode) { GAME.peopleSeen = Math.max(POSE.count, GAME.peopleSeen * 0.995); GAME.humans = POSE.count >= 2 || GAME.peopleSeen > 1.5 ? 2 : 1; if (KEDGE.has('Enter') || KEDGE.has('KeyL') || KEDGE.has('ArrowLeft') || KEDGE.has('ArrowRight')) GAME.forceP2 = true; if (GAME.forceP2) GAME.humans = 2; if (KEDGE.has('Digit1')) GAME.camForce = 1; if (KEDGE.has('Digit2')) GAME.camForce = 2; if (GAME.camForce) GAME.humans = GAME.camForce; }
+  $('selSub').textContent = GAME.camMode ? (POSE.ready ? (GAME.humans === 2 ? `SPLIT SCREEN · 2 PLAYERS (${POSE.count} detected) — P1 stand LEFT, P2 stand RIGHT · hover a raised hand over a card for 2 s · press 1 for vs CPU` : '1P vs CPU — hover a raised hand over a card for 2 s · press 2 for split-screen 2 players') : 'Loading body tracking… (keyboard: P1 A/D + Space · P2 ←/→ + Enter)') : (GAME.humans === 2 ? 'P1: A / D then Space · P2: ← / → then Enter · or click' : 'A / D then Space (or click) · CPU picks a rival');
   const cards = [...$('cards').children]; const rects = cards.map(c => c.getBoundingClientRect());
   // preview models over the cards
   const tanH = Math.tan(THREE.MathUtils.degToRad(menuCam.fov / 2)), depth = 13, aspect = innerWidth / innerHeight;
@@ -1863,7 +1864,8 @@ function toWinner() {
   $('winSub').textContent = `${w.def.name} the ${w.def.cls} · ${heroes[0].score} – ${heroes[1].score}`;
   viewsPass.views = [{ cam: menuCam, x: 0, y: 0, w: 1, h: 1 }]; GAME.bothUpT = 0;
 }
-$('bCam').onclick = () => startCamMode();
+$('bCam').onclick = () => startCamMode(1);
+$('bCam2').onclick = () => startCamMode(2);
 $('bKey1').onclick = () => { AU.init(); GAME.camMode = false; GAME.humans = 1; GAME.forceP2 = false; toSelect(); };
 $('bKey2').onclick = () => { AU.init(); GAME.camMode = false; GAME.humans = 2; toSelect(); };
 $('bAgain').onclick = () => { GAME.forceP2 = false; toSelect(); };
