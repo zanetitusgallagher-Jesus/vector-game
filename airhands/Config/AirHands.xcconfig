@@ -1,0 +1,7 @@
+// Shared build settings. Personal signing settings go in Config/Local.xcconfig (git-ignored);
+// copy Config/Local.xcconfig.example to get started.
+
+AIRHANDS_BUNDLE_ID = dev.airhands.AirHands
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

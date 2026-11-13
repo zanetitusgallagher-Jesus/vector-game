@@ -1,0 +1,7 @@
+AirHands.xcodeproj/
+build/
+Core/.build/
+Core/.swiftpm/
+Config/Local.xcconfig
+*.xcuserstate
+xcuserdata/

@@ -1,0 +1,8 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in.
+// Your Team ID: Xcode → Settings → Accounts → (team) or developer.apple.com → Membership.
+// Signing with a stable Apple Development identity keeps the Camera / Accessibility /
+// Input Monitoring grants across rebuilds.
+DEVELOPMENT_TEAM = ABCDE12345
+
+// Optional: your own bundle id (changing it resets permission grants once).
+// AIRHANDS_BUNDLE_ID = com.yourname.AirHands

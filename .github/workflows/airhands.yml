@@ -1,0 +1,31 @@
+name: AirHands (macOS app)
+on:
+  push:
+    paths: ["airhands/**", ".github/workflows/airhands.yml"]
+  pull_request:
+    paths: ["airhands/**", ".github/workflows/airhands.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: airhands
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcodebuild -version && swift --version
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Core unit tests (swift test)
+        run: ./scripts/test.sh
+      - name: Build app (ad-hoc signed)
+        run: |
+          set -o pipefail
+          ./scripts/build.sh --adhoc
+      - name: Tests via Xcode scheme
+        run: |
+          set -o pipefail
+          ./scripts/test.sh --xcode --adhoc
