@@ -4,16 +4,16 @@ A 2-player full-body superhero battle in one self-contained `index.html`. It use
 
 Open it from any static server (camera access needs `https://` or `localhost`). Then pick **Play with camera** or one of the keyboard modes.
 
-- **Camera:** two players stand side by side, P1 on the left. If only one person is detected, you fight a CPU hero. Calibrate for 3 seconds standing tall with your arms at your sides.
+- **Camera:** two players stand side by side, P1 on the left. If only one person is detected, you fight a CPU hero. Only your upper body (head, shoulders, arms and hands) needs to be in view; feet are not needed. To calibrate, raise both hands above your head and hold for 1.5 seconds.
 - **Body controls:**
-  - Jog in place to run and lean to steer.
-  - Twist your shoulders to look around.
-  - Jump.
-  - Squat and release to super jump.
+  - Pump your arms like you're running to run; real jogging works too.
+  - Tilt your shoulders to steer, and twist them to look around.
+  - Hop up to jump.
+  - Duck down and pop back up to super jump.
   - A fast arm thrust is a punch.
   - Cross your forearms in front of your face to block.
   - Clap overhead for your ULTIMATE.
-  - Run into a wall to run up it.
+  - Keep running into a wall to run up it.
 - **Heroes:**
   - Halcyon (Telekinetic)
   - Flicker (Speedster)
