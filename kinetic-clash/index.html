@@ -42,6 +42,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#05060a;color:var(--in
 .arrowd{position:absolute;font-size:12px;font-weight:700;text-shadow:0 0 4px #000}
 .warn{position:absolute;left:50%;top:40%;transform:translateX(-50%);padding:10px 18px;border-radius:8px;background:rgba(200,20,30,.85);font-weight:800;letter-spacing:.1em;font-size:18px;text-align:center;white-space:nowrap}
 .dbg{position:absolute;left:50%;bottom:160px;transform:translateX(-50%);padding:6px 12px;background:rgba(0,0,0,.7);font:600 15px ui-monospace,Menlo,Consolas,monospace;color:#7fffd4;border-radius:6px;white-space:pre;text-align:center}
+.gev{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);padding:6px 14px;border-radius:20px;background:rgba(0,0,0,.6);font-weight:900;letter-spacing:.12em;font-size:16px;color:#7fffd4;white-space:nowrap}
 .tint{position:absolute;inset:0;pointer-events:none;transition:background .3s}
 .msg{position:absolute;left:50%;top:22%;transform:translateX(-50%);font-size:44px;font-weight:900;letter-spacing:.08em;text-shadow:0 0 18px rgba(0,0,0,.9),0 0 4px #000;white-space:nowrap;text-align:center}
 .cross{position:absolute;left:50%;top:46%;width:6px;height:6px;margin:-3px;border-radius:50%;background:rgba(255,255,255,.7)}
@@ -793,43 +794,61 @@ function wallImpact(b, p, n, power = 1, by = null) {
 
 // ============================================================ §POSE (MediaPipe PoseLandmarker, two people, ~30 fps, separate from render)
 const video = $('vid');
-const POSE = { on: false, ready: false, err: '', lmk: null, slots: [], solo: false, count: 0, lastT: -1, fps: 0 };
+const POSE = { on: false, ready: false, err: '', lmk: null, slots: [], solo: false, count: 0, lastT: -1, fps: 0, model: 'full', vision: null, files: null };
 const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32], [0, 11], [0, 12]];
+// One-Euro filter: smooth when still, near-zero lag when moving fast (kills jitter without making punches late)
+class OneEuro {
+  constructor(minCut, beta, dCut = 1.2) { this.minCut = minCut; this.beta = beta; this.dCut = dCut; this.x = null; this.dx = 0; }
+  a(cut, dt) { const tau = 1 / (2 * Math.PI * cut); return 1 / (1 + tau / dt); }
+  f(x, dt) { if (this.x === null) { this.x = x; return x; } const dx = (x - this.x) / dt; this.dx += this.a(this.dCut, dt) * (dx - this.dx); this.x += this.a(this.minCut + this.beta * Math.abs(this.dx), dt) * (x - this.x); return this.x; }
+}
 function newSlot(i) {
-  return { i, tracked: false, lostT: 9, img: null, wld: null, cx: i ? 0.75 : 0.25, lastSeen: 0,
-    cal: { torso: 0.22, hipY: 0.55, ankleY: 0.9, shW: 0.12, armLen: 0.55, done: false, prog: 0 },
+  const mk = (n, mc, b) => Array.from({ length: n }, () => new OneEuro(mc, b));
+  return { i, tracked: false, img: null, wld: null, cx: i ? 0.75 : 0.25, lastSeen: 0,
+    fI: mk(66, 1.4, 6), fW: mk(99, 1.4, 2.5),
+    cal: { torso: 0.22, hipY: 0.55, ankleY: 0.9, shW: 0.12, armLen: 0.55, kneeR: [0.95, 0.95], done: false, prog: 0 },
     g: newGesture(), events: [] };
 }
 function newGesture() {
-  return { move: 0, energy: 0, sig: 0, turn: 0, lean: 0, camYaw: 0, crouch: false, block: false, blockT: 0, feet: true, pitch: 0, armsDown: false,
-    reach: -1, reachT: 0, reachAim: 0, tposeT: 0, armUp: [false, false], armsUpT: 0, armsUpFired: false, lastWide: -9, lastBlock: -9, lastHigh: [-9, -9],
-    prevE: [0, 0], prevW: null, punchT: [0, 0], pend: [], punches: [], sideOn: false, sideOnTimes: [], jumpLock: false, inAir: false, lastClap: -9, lastRapid: -9,
+  return { move: 0, turn: 0, lean: 0, camYaw: 0, crouch: false, crouchT: 0, block: false, blockT: 0, blockOff: 0, feet: true, pitch: 0, armsDown: false,
+    reach: -1, reachT: 0, reachAim: 0, tposeT: 0, armUp: [false, false], armsUpT: 0, armsUpFired: false, lastWide: -9, lastBlock: -9, lastHigh: -9, lastWideHigh: -9,
+    prevRel: null, prevW2: null, punchT: [-9, -9], punches: [], legUp: [false, false], steps: [], lastStep: -9, prevHipY: null,
+    sideOn: false, sideOnTimes: [], sawBack: -9, inAir: false, lastJump: -9, lastClap: -9, lastRapid: -9, lastSpin: -9, lastSlam: -9, lastHug: -9,
     cursor: { x: 0.5, y: 0.5, raised: false }, label: '' };
 }
 POSE.slots = [newSlot(0), newSlot(1)];
+async function makeLandmarker(model) {
+  const url = CFG.poseModel.replace('pose_landmarker_lite', 'pose_landmarker_' + model).replace('pose_landmarker_lite', 'pose_landmarker_' + model);
+  const opts = d => ({ baseOptions: { modelAssetPath: url, delegate: d }, runningMode: 'VIDEO', numPoses: 2, minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.6 });
+  try { return await POSE.vision.PoseLandmarker.createFromOptions(POSE.files, opts('GPU')); } catch (e) { return await POSE.vision.PoseLandmarker.createFromOptions(POSE.files, opts('CPU')); }
+}
 async function startPose() {
   if (POSE.on) return true;
   POSE.on = true; setStatus('Starting camera…');
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 960 }, height: { ideal: 540 }, facingMode: 'user' }, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: 'user' }, audio: false });
     video.srcObject = stream; await video.play();
   } catch (e) { POSE.err = 'Camera unavailable (' + e.name + '). Use the keyboard.'; POSE.on = false; setStatus(POSE.err); return false; }
   setStatus('Loading body tracking model…');
   try {
-    const vision = await import(CFG.mediapipe + '/vision_bundle.mjs');
-    const files = await vision.FilesetResolver.forVisionTasks(CFG.mediapipe + '/wasm');
-    const opts = d => ({ baseOptions: { modelAssetPath: CFG.poseModel, delegate: d }, runningMode: 'VIDEO', numPoses: 2, minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.5 });
-    try { POSE.lmk = await vision.PoseLandmarker.createFromOptions(files, opts('GPU')); } catch (e) { POSE.lmk = await vision.PoseLandmarker.createFromOptions(files, opts('CPU')); }
+    POSE.vision = await import(CFG.mediapipe + '/vision_bundle.mjs');
+    POSE.files = await POSE.vision.FilesetResolver.forVisionTasks(CFG.mediapipe + '/wasm');
+    try { POSE.lmk = await makeLandmarker('full'); POSE.model = 'full'; } catch (e) { POSE.lmk = await makeLandmarker('lite'); POSE.model = 'lite'; }
   } catch (e) { POSE.err = 'Tracking failed to load: ' + e.message; setStatus(POSE.err); POSE.on = false; return false; }
-  POSE.ready = true; setStatus(''); poseLoop(); return true;
+  POSE.ready = true; POSE.startT = performance.now(); setStatus(''); poseLoop(); return true;
 }
-let poseFrames = 0, poseFpsT = performance.now();
+let poseFrames = 0, poseFpsT = performance.now(), swapping = false;
 function poseLoop() {
   const t0 = performance.now();
-  if (POSE.ready && video.readyState >= 2 && video.currentTime !== POSE.lastT) {
+  if (POSE.ready && !swapping && video.readyState >= 2 && video.currentTime !== POSE.lastT) {
     POSE.lastT = video.currentTime;
     try { const res = POSE.lmk.detectForVideo(video, t0); assignPoses(res, t0 / 1000); } catch (e) { console.warn(e); }
-    poseFrames++; if (t0 - poseFpsT > 1000) { POSE.fps = poseFrames; poseFrames = 0; poseFpsT = t0; }
+    poseFrames++;
+    if (t0 - poseFpsT > 1000) {
+      POSE.fps = poseFrames; poseFrames = 0; poseFpsT = t0;
+      // the accurate model too slow on this machine → drop to the light one
+      if (POSE.model === 'full' && t0 - POSE.startT > 4000 && POSE.fps < 14) { POSE.slowSec = (POSE.slowSec || 0) + 1; if (POSE.slowSec >= 3) { swapping = true; makeLandmarker('lite').then(l => { try { POSE.lmk.close(); } catch (e) { } POSE.lmk = l; POSE.model = 'lite'; swapping = false; }).catch(() => { swapping = false; POSE.model = 'full*'; }); } } else POSE.slowSec = 0;
+    }
   }
   setTimeout(poseLoop, Math.max(2, 1000 / CFG.poseHz - (performance.now() - t0)));
 }
@@ -851,125 +870,173 @@ function assignPoses(res, now) {
   for (let i = 0; i < 2; i++) {
     const s = POSE.slots[i], p = got[i];
     if (!p) { if (now - s.lastSeen > 0.5) s.tracked = false; continue; }
-    const dt = Math.min(0.2, now - (s.lastSeen || now - 0.033)) || 0.033;
     const fresh = !s.tracked || now - s.lastSeen > 0.5;
-    if (fresh || !s.img) { s.img = p.lm.map(q => ({ x: 1 - q.x, y: q.y, v: q.visibility ?? 1 })); s.wld = p.wl.map(q => ({ x: q.x, y: -q.y, z: -q.z })); }
-    else {
-      const a = 0.6, b = 0.55;
-      for (let k = 0; k < 33; k++) { const q = p.lm[k], m = s.img[k]; m.x += (1 - q.x - m.x) * a; m.y += (q.y - m.y) * a; m.v += ((q.visibility ?? 1) - m.v) * 0.5; const w = p.wl[k], n = s.wld[k]; n.x += (w.x - n.x) * b; n.y += (-w.y - n.y) * b; n.z += (-w.z - n.z) * b; }
+    const dt = fresh ? 1 / 30 : clamp(now - s.lastSeen, 1 / 120, 0.2);
+    if (fresh) { s.fI.forEach(f => f.x = null); s.fW.forEach(f => f.x = null); }
+    if (!s.img) { s.img = p.lm.map(() => ({ x: 0, y: 0, v: 0 })); s.wld = p.wl.map(() => ({ x: 0, y: 0, z: 0 })); }
+    for (let k = 0; k < 33; k++) {
+      const q = p.lm[k], m = s.img[k], w = p.wl[k], n = s.wld[k];
+      m.x = s.fI[k * 2].f(1 - q.x, dt); m.y = s.fI[k * 2 + 1].f(q.y, dt); m.v = fresh ? (q.visibility ?? 1) : m.v + ((q.visibility ?? 1) - m.v) * 0.5;
+      n.x = s.fW[k * 3].f(w.x, dt); n.y = s.fW[k * 3 + 1].f(-w.y, dt); n.z = s.fW[k * 3 + 2].f(-w.z, dt);
     }
     s.tracked = true; s.lastSeen = now; s.cx = p.mx;
-    computeGestures(s, fresh ? 0.033 : dt, now);
+    if (fresh) { s.g.prevRel = null; s.g.prevW2 = null; s.g.prevHipY = null; }
+    computeGestures(s, dt, now);
   }
 }
 const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: ((a.z || 0) + (b.z || 0)) / 2 });
 const d3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-function emit(s, ev, data) { s.events.push({ ev, data, t: performance.now() / 1000 }); if (s.events.length > 20) s.events.shift(); if (DEBUG) s.g.lastEv = ev + ' ' + (data ?? ''); s.g.lastEvT = performance.now(); }
+const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+function emit(s, ev, data) { s.events.push({ ev, data, t: performance.now() / 1000 }); if (s.events.length > 20) s.events.shift(); s.g.lastEv = ev + (typeof data === 'number' ? ' ' + data.toFixed(2) : ''); s.g.lastEvT = performance.now(); }
+// All 2D measurements are in "torso units" (T = shoulder-centre to hip-centre distance), so they don't change with how far you stand.
+// Image coords are mirrored: x grows to the right of the screen, y grows downward.
 function computeGestures(s, dt, now) {
   const I = s.img, Wl = s.wld, g = s.g, c = s.cal;
+  const vis = k => I[k].v > 0.5;
   const shC = mid(I[11], I[12]), hipC = mid(I[23], I[24]);
-  const torso = Math.max(0.05, Math.hypot(shC.x - hipC.x, shC.y - hipC.y));
-  g.feet = I[27].v > 0.45 && I[28].v > 0.45 && I[27].y < 0.985 && I[28].y < 0.985;
-  if (!c.done) { c.torso = torso; c.hipY = hipC.y; c.ankleY = Math.max(I[27].y, I[28].y); c.shW = Math.abs(I[11].x - I[12].x); }
+  const torso = Math.max(0.04, d2(shC, hipC));
+  g.feet = I[27].v > 0.4 && I[28].v > 0.4 && I[27].y < 0.99 && I[28].y < 0.99;
+  if (!c.done) { c.torso = torso; c.hipY = hipC.y; c.ankleY = Math.max(I[27].y, I[28].y); c.shW = Math.abs(I[11].x - I[12].x); c.kneeR = [(I[25].y - hipC.y) / torso, (I[26].y - hipC.y) / torso]; }
   const T = c.torso;
-  // --- run: alternating knee / ankle lift
-  const sig = ((I[25].y - I[26].y) + (g.feet ? (I[27].y - I[28].y) : 0)) / T;
-  const dsig = Math.abs(sig - g.sig) / dt; g.sig = sig;
-  g.energy += (Math.min(dsig, 8) - g.energy) * Math.min(1, dt * 5);
-  const rawMove = clamp((g.energy - 0.7) / 2.6, 0, 1);
-  // --- lean steer
-  g.lean = (shC.x - hipC.x) / T;
-  const lz = 0.07, al = Math.abs(g.lean); g.turn = al < lz ? 0 : Math.sign(g.lean) * clamp((al - lz) / 0.25, 0, 1);
-  // --- jump / crouch from baselines
-  const ankY = Math.max(I[27].y, I[28].y), ankUp = Math.min(c.ankleY - I[27].y, c.ankleY - I[28].y) / T;
-  const hipUp = (c.hipY - hipC.y) / T;
-  if (!g.inAir && g.feet && ankUp > 0.09 && hipUp > 0.07) { g.inAir = true; emit(s, 'jump'); }
-  if (g.inAir && ankUp < 0.04) g.inAir = false;
-  const crouch = hipUp < -0.2 && !g.inAir;
-  if (crouch !== g.crouch) { if (!crouch) emit(s, 'crouchUp'); g.crouch = crouch; }
-  g.move = g.inAir ? g.move : (crouch ? 0 : rawMove);
-  if (c.done && !g.inAir && !g.crouch && g.feet && rawMove < 0.25) { c.ankleY += (ankY - c.ankleY) * 0.03; c.hipY += (hipC.y - c.hipY) * 0.02; c.torso += (torso - c.torso) * 0.02; }
-  // --- world-space arms (meters, body frame: x = player's left, y = up, z = toward camera)
-  const sh = [Wl[11], Wl[12]], wr = [Wl[15], Wl[16]], nose = Wl[0];
-  const A = c.armLen;
-  const rel = [0, 1].map(k => ({ x: wr[k].x - sh[k].x, y: wr[k].y - sh[k].y, z: wr[k].z - sh[k].z }));
-  const ext = [0, 1].map(k => d3(wr[k], sh[k]) / A);
-  const wDist = d3(wr[0], wr[1]);
-  const shY = (sh[0].y + sh[1].y) / 2;
-  // shoulder twist → camera
-  const tw = Math.atan2(sh[0].z - sh[1].z, sh[0].x - sh[1].x);
-  g.camYaw = Math.abs(tw) < 0.18 ? 0 : clamp((tw - Math.sign(tw) * 0.18) * 1.6, -1, 1);
-  // punches (fast extension)
+  const hipUp = (c.hipY - hipC.y) / T;                       // + = hips higher than standing
+  const hipVy = g.prevHipY === null ? 0 : (hipC.y - g.prevHipY) / dt / T; g.prevHipY = hipC.y; // − = moving up
+  // ---------- RUN: count real steps (each knee rising above its standing height), speed = cadence
+  const lift = [0, 1].map(k => vis(25 + k) ? c.kneeR[k] - (I[25 + k].y - hipC.y) / T : 0);
   for (let k = 0; k < 2; k++) {
-    const ev = (ext[k] - g.prevE[k]) * A / dt; g.prevE[k] = ext[k];
-    if (rel[k].y > 0.12) g.lastHigh[k] = now;
-    if (ev > 1.5 && ext[k] > 0.62 && rel[k].y < 0.3 && rel[k].y > -0.4 && now - g.punchT[k] > 0.28) {
-      g.punchT[k] = now; const power = clamp((ev - 1.5) / 2.5, 0, 1);
-      const other = g.pend.find(p => p.k !== k && now - p.t < 0.16);
-      if (other) { g.pend = []; emit(s, 'bothPush'); }
-      else g.pend.push({ k, t: now, power });
-      g.punches.push(now);
+    if (!g.legUp[k] && lift[k] > 0.12 && lift[k] > lift[1 - k] + 0.07 && !g.inAir) { g.legUp[k] = true; g.steps.push(now); g.lastStep = now; }
+    else if (g.legUp[k] && lift[k] < 0.05) g.legUp[k] = false;
+  }
+  g.steps = g.steps.filter(t => now - t < 1.6);
+  let runT = 0;
+  if (g.steps.length >= 2 && now - g.lastStep < 0.75) runT = clamp(0.4 + (g.steps.length / 1.6 - 1.2) / 2.4 * 0.6, 0.4, 1);
+  if (g.crouch) runT = 0;
+  g.move += (runT - g.move) * Math.min(1, dt * (runT > g.move ? 10 : 4));
+  // ---------- LEAN to steer (shoulders vs hips, sideways)
+  g.lean = (shC.x - hipC.x) / T;
+  const al = Math.abs(g.lean); g.turn = al < 0.06 ? 0 : Math.sign(g.lean) * clamp((al - 0.06) / 0.18, 0, 1);
+  // ---------- JUMP: hips shoot up fast, clearly above standing height (jogging bob stays below this)
+  const ankUp = g.feet ? Math.min(c.ankleY - I[27].y, c.ankleY - I[28].y) / T : 1;
+  if (!g.inAir && hipUp > 0.1 && hipVy < -0.7 && ankUp > 0.03 && Math.abs(lift[0] - lift[1]) < 0.25 && now - g.lastJump > 0.45) { g.inAir = true; g.lastJump = now; emit(s, 'jump'); }
+  if (g.inAir && (hipUp < 0.05 || now - g.lastJump > 1.2)) g.inAir = false;
+  // ---------- CROUCH (squat); standing back up fires crouchUp → super jump
+  const sq = hipUp < -0.16 && !g.inAir;
+  g.crouchT = sq ? g.crouchT + dt : 0;
+  if (!g.crouch && g.crouchT > 0.12) g.crouch = true;
+  if (g.crouch && hipUp > -0.08) { g.crouch = false; emit(s, 'crouchUp'); }
+  // slow re-baseline while standing still (players drift closer / further)
+  if (c.done && !g.inAir && !g.crouch && g.feet && now - g.lastStep > 1.5 && Math.abs(hipVy) < 0.3) {
+    c.ankleY += (Math.max(I[27].y, I[28].y) - c.ankleY) * 0.04; c.hipY += (hipC.y - c.hipY) * 0.04; c.torso += (torso - c.torso) * 0.03;
+    for (let k = 0; k < 2; k++) if (vis(25 + k)) c.kneeR[k] += ((I[25 + k].y - hipC.y) / torso - c.kneeR[k]) * 0.04;
+  }
+  // ---------- ARMS (2D in torso units; y up = positive)
+  const sh2 = [I[11], I[12]], wr2 = [I[15], I[16]], nose = I[0];
+  const wv = [vis(15) && vis(13), vis(16) && vis(14)];
+  const r2 = [0, 1].map(k => ({ x: (wr2[k].x - sh2[k].x) / T, y: (sh2[k].y - wr2[k].y) / T }));
+  const out2 = [-r2[0].x, r2[1].x];                          // + = arm out to that side (mirror image: player's left hand is on screen-left)
+  const shYi = (sh2[0].y + sh2[1].y) / 2, hipYi = hipC.y;
+  const wDist2 = d2(wr2[0], wr2[1]) / T;
+  const overhead = [0, 1].map(k => wv[k] && wr2[k].y < nose.y - 0.05 * T);
+  const aboveSh = [0, 1].map(k => wv[k] && r2[k].y > 0.15);
+  const v2 = g.prevW2 ? [0, 1].map(k => ({ x: (wr2[k].x - g.prevW2[k].x) / dt / T, y: (wr2[k].y - g.prevW2[k].y) / dt / T })) : [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+  g.prevW2 = [{ x: wr2[0].x, y: wr2[0].y }, { x: wr2[1].x, y: wr2[1].y }];
+  // world (metres) for punches toward the camera + pointing forward
+  const shW = [Wl[11], Wl[12]], wrW = [Wl[15], Wl[16]], A = c.armLen;
+  const rel = [0, 1].map(k => ({ x: wrW[k].x - shW[k].x, y: wrW[k].y - shW[k].y, z: wrW[k].z - shW[k].z }));
+  const ext = rel.map(r => Math.hypot(r.x, r.y, r.z));
+  // shoulder twist → camera look
+  const tw = Math.atan2(shW[0].z - shW[1].z, shW[0].x - shW[1].x);
+  g.camYaw = Math.abs(tw) < 0.22 ? 0 : clamp((tw - Math.sign(tw) * 0.22) * 1.5, -1, 1);
+  // ---------- PUNCH: fast outward arm motion at chest/face height (3D speed away from shoulder, or fast 2D jab)
+  for (let k = 0; k < 2; k++) {
+    if (!wv[k] || !g.prevRel) continue;
+    const pr = g.prevRel[k], vel = { x: (rel[k].x - pr.x) / dt, y: (rel[k].y - pr.y) / dt, z: (rel[k].z - pr.z) / dt };
+    const outSp = (vel.x * rel[k].x + vel.y * rel[k].y + vel.z * rel[k].z) / Math.max(0.05, ext[k]);
+    const sp2 = Math.hypot(v2[k].x, v2[k].y), away2 = (v2[k].x * (k ? 1 : -1)) > 2.5 || -v2[k].y > 2.5;
+    const height = r2[k].y > -0.75 && r2[k].y < 0.45;          // between belly and just above shoulder
+    const fwd = rel[k].z > 0.12 || out2[k] > 0.35;
+    const p3 = outSp > 1.3 && ext[k] > 0.55 * A && fwd, p2 = sp2 > 4 && away2 && out2[k] > 0.2;
+    // not a punch: hands coming up to the face (block), arms flung wide (plane / net), or a mostly-vertical raise (thread / arms up)
+    const toFace = Math.abs(wr2[k].x - nose.x) < 0.4 * T && r2[k].y > -0.1 && ext[k] < 0.72 * A;
+    const wide = out2[0] > 0.45 && out2[1] > 0.45;
+    const vertical = Math.abs(v2[k].y) > 1.6 * Math.abs(v2[k].x) && r2[k].y > 0.05 && rel[k].z < 0.3;
+    const inward = out2[k] < 0.1 && rel[k].z < 0.2;
+    if (height && (p3 || p2) && !toFace && !wide && !vertical && !inward && now - g.punchT[k] > 0.28) {
+      g.punchT[k] = now; const power = clamp(Math.max((outSp - 1.3) / 2.2, (sp2 - 4) / 6), 0, 1);
+      (g.pend ||= []).push({ k, t: now, power });
     }
   }
-  for (const p of g.pend.slice()) if (now - p.t >= 0.16) { emit(s, 'punch', p.power); g.pend.splice(g.pend.indexOf(p), 1); }
-  g.punches = g.punches.filter(t => now - t < 1.2);
-  if (g.punches.length >= 4 && now - g.lastRapid > 1.5) { g.lastRapid = now; emit(s, 'rapid'); }
-  // block: forearms crossed in front of face
-  const faceH = [0, 1].every(k => wr[k].y > shY - 0.08 && wr[k].y < nose.y + 0.25);
-  const blockNow = faceH && (wDist < 0.24 || wr[0].x < wr[1].x) && ext[0] < 0.85 && ext[1] < 0.85;
-  g.blockT = blockNow ? g.blockT + dt : 0; g.block = g.blockT > 0.06;
-  if (g.block) g.lastBlock = now;
-  // net: crossed → flung wide open
-  if (wDist > 1.45 * A && Math.abs(rel[0].y) < 0.4 && Math.abs(rel[1].y) < 0.4) { if (now - g.lastBlock < 0.9) { g.lastBlock = -9; emit(s, 'net'); } }
-  if (wDist > 0.55) g.lastWide = now;
-  // hug in at chest height
-  const chest = [0, 1].every(k => wr[k].y < shY - 0.06 && wr[k].y > shY - 0.55);
-  if (chest && wDist < 0.26 && now - g.lastWide < 0.9 && !g.block) { g.lastWide = -9; emit(s, 'hug'); }
-  // overhead: arms up / clap
-  const above = [0, 1].every(k => wr[k].y > nose.y + 0.02);
-  if (above && wDist > 0.3) { g.armsUpT += dt; if (g.armsUpT > 0.55 && !g.armsUpFired) { g.armsUpFired = true; emit(s, 'armsUp'); } g.wideHigh = now; } else if (!above) { g.armsUpT = 0; g.armsUpFired = false; }
-  if (above && wDist < 0.17 && now - (g.wideHigh || -9) < 0.9 && now - g.lastClap > 1.5) { g.lastClap = now; emit(s, 'clap'); }
-  // slam both arms down
-  if (g.prevW) {
-    const vy = [0, 1].map(k => (wr[k].y - g.prevW[k].y) / dt);
-    if (vy[0] < -2.0 && vy[1] < -2.0 && now - g.lastHigh[0] < 0.6 && now - g.lastHigh[1] < 0.6) { g.lastHigh = [-9, -9]; emit(s, 'slam'); }
+  // confirm punches after 0.1 s unless the arms ended up spread wide (plane / net / hug wind-up) or at the face (block)
+  const spread = out2[0] > 0.4 && out2[1] > 0.4, atFace = [0, 1].every(k => wv[k] && Math.abs(wr2[k].x - nose.x) < 0.6 * T && r2[k].y > -0.2 && ext[k] < 0.72 * A);
+  for (const pc of (g.pend || []).slice()) {
+    if (spread || atFace || g.block) { g.pend.splice(g.pend.indexOf(pc), 1); continue; }
+    if (now - pc.t >= 0.1) {
+      g.pend.splice(g.pend.indexOf(pc), 1); emit(s, 'punch', pc.power); g.punches.push(now); g.lastPunchEmit = g.lastPunchEmit || [-9, -9]; g.lastPunchEmit[pc.k] = now;
+      if (now - g.lastPunchEmit[1 - pc.k] < 0.3 && now - (g.lastBoth || -9) > 0.6) { g.lastBoth = now; emit(s, 'bothPush'); }
+    }
   }
-  g.prevW = [{ ...wr[0] }, { ...wr[1] }];
-  // single raised arms (threads)
-  for (let k = 0; k < 2; k++) g.armUp[k] = rel[k].y > 0.14 && ext[k] > 0.55;
-  // reach / point one arm (held)
-  const horiz = k => ext[k] > 0.78 && Math.abs(rel[k].y) < 0.28;
-  const tpose = horiz(0) && horiz(1) && rel[0].x > 0.45 * A && rel[1].x < -0.45 * A;
-  g.tposeT = tpose ? g.tposeT + dt : 0;
-  const rk = !tpose ? (horiz(0) && !horiz(1) ? 0 : horiz(1) && !horiz(0) ? 1 : -1) : -1;
-  if (rk >= 0 && (g.reach === rk || g.reach < 0)) { g.reachT += dt; g.reach = rk; g.reachAim = clamp(Math.atan2(-rel[rk].x, Math.max(0.05, rel[rk].z)), -1.3, 1.3); }
+  g.prevRel = rel.map(r => ({ ...r }));
+  g.punches = g.punches.filter(t => now - t < 1.3);
+  if (g.punches.length >= 4 && now - g.lastRapid > 1.5) { g.lastRapid = now; g.punches = []; emit(s, 'rapid'); }
+  // ---------- BLOCK: both wrists up in front of the face (crossed or together)
+  const nearFace = k => wv[k] && Math.abs(wr2[k].x - nose.x) < 0.6 * T && wr2[k].y > nose.y - 0.45 * T && wr2[k].y < shYi + 0.35 * T;
+  const blockNow = nearFace(0) && nearFace(1) && wDist2 < 0.75 && ext[0] < 0.72 * A && ext[1] < 0.72 * A; // bent arms (a straight two-hand push is not a block)
+  if (blockNow) { g.blockT += dt; g.blockOff = 0; } else { g.blockOff += dt; if (g.blockOff > 0.15) g.blockT = 0; }
+  g.block = g.blockT > 0.08;
+  if (g.block) g.lastBlock = now;
+  // ---------- NET: arms crossed/together at the face, then flung wide open
+  const wideNow = wv[0] && wv[1] && wDist2 > 1.9 && Math.abs(r2[0].y) < 0.6 && Math.abs(r2[1].y) < 0.6;
+  if (wideNow && now - g.lastBlock < 1.0) { g.lastBlock = -9; emit(s, 'net'); }
+  // ---------- HUG: wide, then both hands in to the chest
+  if (wv[0] && wv[1] && wDist2 > 1.5) g.lastWide = now;
+  const chest = k => wv[k] && wr2[k].y > shYi + 0.1 * T && wr2[k].y < hipYi - 0.05 * T;
+  if (chest(0) && chest(1) && wDist2 < 0.45 && now - g.lastWide < 1.1 && now - g.lastHug > 1) { g.lastHug = now; g.lastWide = -9; emit(s, 'hug'); }
+  // ---------- OVERHEAD: both arms up (hold) / clap
+  if (overhead[0] && overhead[1] && wDist2 > 0.55) { g.armsUpT += dt; g.lastWideHigh = now; if (g.armsUpT > 0.4 && !g.armsUpFired) { g.armsUpFired = true; emit(s, 'armsUp'); } }
+  else if (!(overhead[0] && overhead[1])) { g.armsUpT = 0; g.armsUpFired = false; }
+  if (aboveSh[0] && aboveSh[1] && wDist2 > 0.8) g.lastWideHigh = now;
+  if (overhead[0] && overhead[1] && wDist2 < 0.4 && now - g.lastWideHigh < 1.2 && now - g.lastClap > 1.5) { g.lastClap = now; emit(s, 'clap'); }
+  // ---------- SLAM: both arms were up, then come down fast
+  if (aboveSh[0] && aboveSh[1]) g.lastHigh = now;
+  if (wv[0] && wv[1] && v2[0].y > 3 && v2[1].y > 3 && now - g.lastHigh < 0.7 && r2[0].y < 0.1 && r2[1].y < 0.1 && now - g.lastSlam > 1) { g.lastSlam = now; g.lastHigh = -9; emit(s, 'slam'); }
+  // ---------- single arm raised (thread)
+  for (let k = 0; k < 2; k++) g.armUp[k] = wv[k] && (r2[k].y > 0.3 || (g.armUp[k] && r2[k].y > 0.12));  // hysteresis: easy to keep up
+  // ---------- REACH / POINT one arm (sideways in 2D, or forward in 3D) and PLANE (both arms out)
+  const side = k => wv[k] && Math.abs(r2[k].y) < 0.35 && out2[k] > 0.55;
+  const fwdW = k => wv[k] && rel[k].z > 0.25 && Math.abs(rel[k].y) < 0.3 && ext[k] > 0.62 * A && !aboveSh[k];
+  const hz = k => side(k) || fwdW(k);
+  const tpose = side(0) && side(1);
+  g.tposeT = tpose ? g.tposeT + dt : Math.max(0, g.tposeT - dt * 2);
+  const rk = !tpose && !g.block ? (hz(0) && !hz(1) ? 0 : hz(1) && !hz(0) ? 1 : -1) : -1;
+  if (rk >= 0 && (g.reach === rk || g.reach < 0)) { g.reachT += dt; g.reach = rk; g.reachAim = side(rk) && !fwdW(rk) ? (rk ? 1.1 : -1.1) * 0.7 : clamp(Math.atan2(-rel[rk].x, Math.max(0.05, rel[rk].z)), -1.3, 1.3); }
   else { g.reach = -1; g.reachT = 0; }
-  g.pitch = clamp(((rel[0].y + rel[1].y) / 2) / 0.28, -1, 1);
-  g.armsDown = rel[0].y < -0.38 && rel[1].y < -0.38;
-  // spin: torso goes side-on twice
-  const shW = Math.abs(I[11].x - I[12].x) / Math.max(0.02, c.shW);
-  const so = shW < 0.38;
-  if (so && !g.sideOn) { g.sideOnTimes.push(now); g.sideOnTimes = g.sideOnTimes.filter(t => now - t < 3); if (g.sideOnTimes.length >= 2) { g.sideOnTimes = []; emit(s, 'spin'); } }
+  g.pitch = clamp(((r2[0].y + r2[1].y) / 2) / 0.4, -1, 1);
+  g.armsDown = wv[0] && wv[1] && r2[0].y < -0.6 && r2[1].y < -0.6 && out2[0] < 0.5 && out2[1] < 0.5;
+  // ---------- SPIN: torso goes side-on twice, or you turn your back and come round again
+  const shWr = Math.abs(I[11].x - I[12].x) / Math.max(0.02, c.shW);
+  const so = shWr < 0.45;
+  if (so && !g.sideOn) { g.sideOnTimes.push(now); g.sideOnTimes = g.sideOnTimes.filter(t => now - t < 3.5); if (g.sideOnTimes.length >= 2 && now - g.lastSpin > 3) { g.lastSpin = now; g.sideOnTimes = []; emit(s, 'spin'); } }
   g.sideOn = so;
-  // menu cursor (raised hand, measured relative to the body so both players can reach every card)
+  const backTurned = I[0].v < 0.35 && I[11].v > 0.5 && I[12].v > 0.5; if (backTurned) g.sawBack = now;
+  if (!backTurned && I[0].v > 0.7 && now - g.sawBack < 3 && now - g.sawBack > 0.15 && now - g.lastSpin > 3) { g.lastSpin = now; g.sawBack = -9; g.sideOnTimes = []; emit(s, 'spin'); }
+  // ---------- menu cursor (raised hand, measured relative to the body so both players can reach every card)
   const hk = I[15].y < I[16].y ? 15 : 16, h = I[hk];
-  g.cursor.raised = h.y < hipC.y - T * 0.1;
+  g.cursor.raised = I[hk].v > 0.5 && h.y < hipC.y - T * 0.1;
   g.cursor.x = clamp(0.5 + (h.x - shC.x) / (T * 2.2), 0, 1); g.cursor.y = clamp(0.5 + (h.y - shC.y) / (T * 1.6), 0, 1);
-  g.bothUp = I[15].y < I[0].y && I[16].y < I[0].y;
-  // calibration: arms relaxed, feet visible
+  g.bothUp = overhead[0] && overhead[1];
+  // ---------- calibration: arms relaxed, feet visible
   if (CAL.active && !c.done) {
-    const relaxed = rel[0].y < -0.3 && rel[1].y < -0.3;
+    const relaxed = r2[0].y < -0.45 && r2[1].y < -0.45;
     if (g.feet && relaxed) {
-      c.acc = c.acc || { t: 0, a: 0, n: 0 }; c.acc.a += (d3(wr[0], sh[0]) + d3(wr[1], sh[1])) / 2; c.acc.n++;
+      c.acc = c.acc || { a: 0, n: 0 }; c.acc.a += (ext[0] + ext[1]) / 2; c.acc.n++;
       c.prog += dt / 3;
-      if (c.prog >= 1) { c.done = true; c.armLen = clamp(c.acc.a / c.acc.n, 0.4, 0.75); c.torso = torso; c.hipY = hipC.y; c.ankleY = ankY; c.shW = Math.abs(I[11].x - I[12].x); AU.play('select'); }
+      if (c.prog >= 1) { c.done = true; c.armLen = clamp(c.acc.a / c.acc.n, 0.4, 0.75); c.torso = torso; c.hipY = hipC.y; c.ankleY = Math.max(I[27].y, I[28].y); c.shW = Math.abs(I[11].x - I[12].x); c.kneeR = [(I[25].y - hipC.y) / torso, (I[26].y - hipC.y) / torso]; AU.play('select'); }
     } else c.prog = Math.max(0, c.prog - dt * 0.5);
   }
-  // debug label
+  // ---------- debug label
   const L = [];
-  if (g.move > 0.05) L.push('RUN ' + (g.move * 100 | 0) + '%'); if (g.turn) L.push(g.turn > 0 ? 'LEAN R' : 'LEAN L'); if (g.camYaw) L.push('TWIST ' + (g.camYaw > 0 ? 'R' : 'L'));
+  if (g.move > 0.05) L.push('RUN ' + (g.move * 100 | 0) + '% (' + g.steps.length + ' steps)'); if (g.turn) L.push(g.turn > 0 ? 'LEAN R' : 'LEAN L'); if (g.camYaw) L.push('TWIST ' + (g.camYaw > 0 ? 'R' : 'L'));
   if (g.inAir) L.push('JUMP'); if (g.crouch) L.push('CROUCH'); if (g.block) L.push('BLOCK'); if (g.tposeT > 0) L.push('PLANE ' + g.tposeT.toFixed(1));
-  if (g.reach >= 0) L.push((g.reach ? 'REACH R' : 'REACH L') + ' ' + g.reachT.toFixed(1)); if (g.armUp[0]) L.push('ARM UP L'); if (g.armUp[1]) L.push('ARM UP R');
+  if (g.reach >= 0) L.push((g.reach ? 'POINT R' : 'POINT L') + ' ' + g.reachT.toFixed(1)); if (g.armUp[0]) L.push('ARM UP L'); if (g.armUp[1]) L.push('ARM UP R');
   if (g.armsUpT > 0) L.push('ARMS UP'); if (!g.feet) L.push('NO FEET');
   g.label = L.join(' · ') || 'IDLE';
 }
@@ -1206,7 +1273,9 @@ function knockOut(t, src) {
 
 function punch(h, power) {
   h.punchAnim = 0.28; h.punchSide = 1 - h.punchSide; AU.play('whoosh', 0.6);
-  const e = h.enemy, f = h.fwd, reach = 2.9 * h.def.size;
+  const e = h.enemy, reach = 2.9 * h.def.size;
+  if (e && !e.ko && e.pos.distanceTo(h.pos) < 7 && facingDot(h, e.pos) > -0.3) h.yaw = Math.atan2(e.pos.x - h.pos.x, e.pos.z - h.pos.z); // auto-face nearby enemy
+  const f = h.fwd;
   if (e && !e.ko) {
     const d = e.pos.distanceTo(h.pos);
     if (d < 7 && d > reach * 0.8 && facingDot(h, e.pos) > 0.6 && h.onGround) h.vel.addScaledVector(tmpV.copy(e.pos).sub(h.pos).setY(0).normalize(), 10); // lunge
@@ -1798,9 +1867,9 @@ function buildHUD() {
       <div class="bar hp"><i style="width:100%"></i></div><div class="bar ult"><i style="width:0%"></i></div>
       <div class="pows">${h.def.powers.map(p => `<div class="pow"><b></b>${p.i}<small>${p.n}</small></div>`).join('')}<div class="pow ultp"><b></b>★<small>ULT</small></div></div></div>
       <div class="tut hidden"></div><div class="moves hidden"></div><canvas class="cam" width="176" height="132"></canvas><div class="dot"></div>
-      <div class="arrow hidden"></div><div class="arrowd hidden"></div><div class="warn hidden"></div><div class="dbg hidden"></div><div class="msg"></div>`;
+      <div class="arrow hidden"></div><div class="arrowd hidden"></div><div class="warn hidden"></div><div class="dbg hidden"></div><div class="gev hidden"></div><div class="msg"></div>`;
     hud.appendChild(half);
-    HUD.push({ half, score: half.querySelector('.score'), hp: half.querySelector('.hp i'), hpBar: half.querySelector('.hp'), ult: half.querySelector('.ult i'), ultBar: half.querySelector('.ult'), pows: [...half.querySelectorAll('.pow')], cam: half.querySelector('.cam'), dot: half.querySelector('.dot'), arrow: half.querySelector('.arrow'), arrowd: half.querySelector('.arrowd'), warn: half.querySelector('.warn'), dbg: half.querySelector('.dbg'), msg: half.querySelector('.msg'), tut: half.querySelector('.tut'), moves: half.querySelector('.moves'), tint: half.querySelector('.tint') });
+    HUD.push({ half, score: half.querySelector('.score'), hp: half.querySelector('.hp i'), hpBar: half.querySelector('.hp'), ult: half.querySelector('.ult i'), ultBar: half.querySelector('.ult'), pows: [...half.querySelectorAll('.pow')], cam: half.querySelector('.cam'), dot: half.querySelector('.dot'), arrow: half.querySelector('.arrow'), arrowd: half.querySelector('.arrowd'), warn: half.querySelector('.warn'), dbg: half.querySelector('.dbg'), gev: half.querySelector('.gev'), msg: half.querySelector('.msg'), tut: half.querySelector('.tut'), moves: half.querySelector('.moves'), tint: half.querySelector('.tint') });
   }
   if (!GAME.solo) { const d = document.createElement('div'); d.id = 'divider'; hud.appendChild(d); }
   else { const e = document.createElement('div'); e.id = 'enemy'; e.innerHTML = `<div class="name"><span style="color:var(--p1)">CPU · ${heroes[1].def.name}</span><span class="score" id="escore">0</span></div><div class="bar hp"><i id="ehp" style="width:100%"></i></div>`; hud.appendChild(e); }
@@ -1825,6 +1894,7 @@ function updateHUD() {
     if (pose && POSE.ready) { if (!s.tracked) warn = 'PLAYER ' + (i + 1) + ' NOT DETECTED<br><small>stand in your half of the camera</small>'; else if (!s.g.feet) warn = '⚠ STEP BACK<br><small>feet must be visible to run &amp; jump</small>'; }
     U.warn.innerHTML = warn; U.warn.classList.toggle('hidden', !warn);
     const mv = (GAME.state === 'match' || GAME.state === 'countdown') && GAME.movesT > 0; U.moves.classList.toggle('hidden', !mv); if (mv && !U.moves.dataset.on) { U.moves.innerHTML = movesHTML(h, i); U.moves.dataset.on = 1; }
+    const gShow = pose && s.g.lastEv && performance.now() - s.g.lastEvT < 900; U.gev.classList.toggle('hidden', !gShow); if (gShow) { const t = '▶ ' + s.g.lastEv.split(' ')[0].replace(/([A-Z])/g, ' $1').toUpperCase(); if (U.gev.textContent !== t) U.gev.textContent = t; }
     U.dbg.classList.toggle('hidden', !DEBUG);
     if (DEBUG) U.dbg.textContent = (pose ? (s.g.label + (s.g.lastEv && performance.now() - s.g.lastEvT < 1500 ? '\n▶ ' + s.g.lastEv.toUpperCase() : '')) : (GAME.ctl[i] === 'cpu' ? 'CPU' : 'KEYBOARD')) + `\npose ${POSE.fps} fps · people ${POSE.count}`;
     let msg = h.msgT > 0 ? h.msg : (h.ult >= 100 ? (pose ? '★ ULTIMATE READY — CLAP OVERHEAD' : '★ ULTIMATE READY (' + (i ? 'U' : 'T') + ')') : '');
@@ -2084,7 +2154,7 @@ function frame(now) {
 // ---------- boot
 buildCity(); populateProps(); setDay(0.35);
 viewsPass.views = [{ cam: menuCam, x: 0, y: 0, w: 1, h: 1 }];
-window.__KC = { shootThread, rayBuildings, TUT, updateTutorial, INJ, step: (n, dt = 1 / 60) => { for (let k = 0; k < n; k++) { if (GAME.state === 'countdown') GAME.state = 'match'; stepMatch(dt); } }, GAME, heroes, props, city, POSE, HEROES, startMatch, toSelect, pickHero, doUlt, usePower, WORLD };
+window.__KC = { newSlot, computeGestures, CAL, shootThread, rayBuildings, TUT, updateTutorial, INJ, step: (n, dt = 1 / 60) => { for (let k = 0; k < n; k++) { if (GAME.state === 'countdown') GAME.state = 'match'; stepMatch(dt); } }, GAME, heroes, props, city, POSE, HEROES, startMatch, toSelect, pickHero, doUlt, usePower, WORLD };
 requestAnimationFrame(frame);
 </script>
 </body>
