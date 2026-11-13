@@ -115,7 +115,7 @@ button.alt{border-color:#ff5a6e;background:rgba(255,90,110,.12)}
   <div class="btns" style="margin-top:12px"><button id="bTut" class="alt" style="font-size:13px;padding:8px 14px"></button></div>
   <div id="camStat" class="sub" style="margin-top:18px"></div>
   <div class="help">
-    <b>Body controls</b> — jog in place to run · lean to steer · twist shoulders to look · jump · squat &amp; release for a super jump · fast arm thrust = punch · forearms crossed at face = block · clap overhead = ULTIMATE.<br>
+    <b>Body controls (upper body only — no feet needed)</b> — pump your arms like running to run · tilt your shoulders to steer · twist shoulders to look · hop up to jump · duck down &amp; pop up for a super jump · fast arm thrust = punch · forearms crossed at face = block · clap overhead = ULTIMATE.<br>
     Two players stand side by side (P1 on the left). One player? You fight a CPU hero. First to <b>5 KOs</b> wins.<br>
     <b>Keyboard</b> — P1: WASD move, Space jump, C crouch, V block, F punch, Q/E/R powers, T ultimate · P2: Arrows, Enter jump, Right-Shift crouch, K block, L punch, I/O/P powers, U ultimate.<br>
     <b>D</b> toggles the gesture debug label in camera mode (F3 or ` in keyboard mode, where D steers). <b>Esc</b> returns to the title.
@@ -129,7 +129,7 @@ button.alt{border-color:#ff5a6e;background:rgba(255,90,110,.12)}
 
 <div id="calib" class="screen dim hidden">
   <h2 style="letter-spacing:.2em;margin:0 0 6px">CALIBRATION</h2>
-  <div class="sub">Stand tall, arms relaxed at your sides, whole body in view. Hold still for 3 seconds.</div>
+  <div class="sub">🙌 Raise BOTH hands above your head and hold for 1.5 seconds. Only your upper body (head, shoulders, arms, hands) needs to be in view.</div>
   <div id="calibBox"></div>
 </div>
 
@@ -806,7 +806,7 @@ function newSlot(i) {
   const mk = (n, mc, b) => Array.from({ length: n }, () => new OneEuro(mc, b));
   return { i, tracked: false, img: null, wld: null, cx: i ? 0.75 : 0.25, lastSeen: 0,
     fI: mk(66, 1.4, 6), fW: mk(99, 1.4, 2.5),
-    cal: { torso: 0.22, hipY: 0.55, ankleY: 0.9, shW: 0.12, armLen: 0.55, kneeR: [0.95, 0.95], done: false, prog: 0 },
+    cal: { unit: 0.2, shY: 0.35, shX: 0.5, shW: 0.12, armLen: 0.55, kneeR: [0.9, 0.9], done: false, prog: 0 },
     g: newGesture(), events: [] };
 }
 function newGesture() {
@@ -854,7 +854,7 @@ function poseLoop() {
 }
 function assignPoses(res, now) {
   const L = res.landmarks || [], W = res.worldLandmarks || [];
-  const list = L.map((lm, k) => ({ lm, wl: W[k], mx: 1 - (lm[23].x + lm[24].x) / 2, size: Math.abs(lm[0].y - (lm[27].y + lm[28].y) / 2) }));
+  const list = L.map((lm, k) => ({ lm, wl: W[k], mx: 1 - (lm[23].x + lm[24].x) / 2, size: Math.abs(lm[11].x - lm[12].x) }));
   POSE.count = list.length;
   const got = [null, null];
   if (POSE.solo) { if (list.length) got[0] = list.sort((a, b) => b.size - a.size)[0]; }
@@ -888,45 +888,58 @@ const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: ((a.z || 0) 
 const d3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 function emit(s, ev, data) { s.events.push({ ev, data, t: performance.now() / 1000 }); if (s.events.length > 20) s.events.shift(); s.g.lastEv = ev + (typeof data === 'number' ? ' ' + data.toFixed(2) : ''); s.g.lastEvT = performance.now(); }
-// All 2D measurements are in "torso units" (T = shoulder-centre to hip-centre distance), so they don't change with how far you stand.
+// UPPER BODY ONLY: everything is measured from the head, shoulders and arms, so feet (and even hips) don't need to be in view.
+// 2D distances are in "body units" T = 1.5 x shoulder width, so they don't change with how far you stand.
 // Image coords are mirrored: x grows to the right of the screen, y grows downward.
 function computeGestures(s, dt, now) {
   const I = s.img, Wl = s.wld, g = s.g, c = s.cal;
   const vis = k => I[k].v > 0.5;
-  const shC = mid(I[11], I[12]), hipC = mid(I[23], I[24]);
-  const torso = Math.max(0.04, d2(shC, hipC));
-  g.feet = I[27].v > 0.4 && I[28].v > 0.4 && I[27].y < 0.99 && I[28].y < 0.99;
-  if (!c.done) { c.torso = torso; c.hipY = hipC.y; c.ankleY = Math.max(I[27].y, I[28].y); c.shW = Math.abs(I[11].x - I[12].x); c.kneeR = [(I[25].y - hipC.y) / torso, (I[26].y - hipC.y) / torso]; }
-  const T = c.torso;
-  const hipUp = (c.hipY - hipC.y) / T;                       // + = hips higher than standing
-  const hipVy = g.prevHipY === null ? 0 : (hipC.y - g.prevHipY) / dt / T; g.prevHipY = hipC.y; // − = moving up
-  // ---------- RUN: count real steps (each knee rising above its standing height), speed = cadence
-  const lift = [0, 1].map(k => vis(25 + k) ? c.kneeR[k] - (I[25 + k].y - hipC.y) / T : 0);
+  const shC = mid(I[11], I[12]), hipC = { x: shC.x, y: shC.y + 1.0 * (c.unit || 0.2) };
+  const shWnow = Math.max(0.03, Math.abs(I[11].x - I[12].x));
+  // shoulder-twist estimate (world z difference) so turning sideways doesn't shrink the body unit
+  const facing = Math.abs(Wl[11].z - Wl[12].z) < 0.12;
+  g.feet = true;
+  g.hands = vis(15) && vis(16);
+  g.upper = vis(11) && vis(12) && vis(0);
+  if (!c.done) { c.unit = shWnow * 1.5; c.shY = shC.y; c.shX = shC.x; }
+  const T = c.unit, torso = T;
+  if (c.done && facing && vis(11) && vis(12)) c.unit += (shWnow * 1.5 - c.unit) * 0.01;  // follow players stepping closer / further
+  const shUp = (c.shY - shC.y) / T;                          // + = shoulders higher than standing
+  const shVy = g.prevHipY === null ? 0 : (shC.y - g.prevHipY) / dt / T; g.prevHipY = shC.y; // − = moving up
+  // ---------- RUN: pump your arms like running (each hand swinging up past the other counts as a step).
+  // Real jogging in place works too: knees (if visible) and the shoulder bounce also count.
+  const armDiff = (I[15].y - I[16].y) / T;
+  if (g.hands) {
+    const sgn = armDiff > 0.22 ? 1 : armDiff < -0.22 ? -1 : 0;
+    const lowEnough = I[15].y > shC.y - 0.1 * T && I[16].y > shC.y - 0.1 * T;   // hands below shoulder line = running arms, not a raise
+    if (sgn && sgn !== g.armSide && lowEnough) { if (g.armSide) { g.steps.push(now); g.lastStep = now; } g.armSide = sgn; }
+  }
+  const lift = [0, 1].map(k => vis(25 + k) && vis(23 + k) ? c.kneeR[k] - (I[25 + k].y - I[23 + k].y) / T : 0);
   for (let k = 0; k < 2; k++) {
-    if (!g.legUp[k] && lift[k] > 0.12 && lift[k] > lift[1 - k] + 0.07 && !g.inAir) { g.legUp[k] = true; g.steps.push(now); g.lastStep = now; }
-    else if (g.legUp[k] && lift[k] < 0.05) g.legUp[k] = false;
+    if (!g.legUp[k] && lift[k] > 0.15 && lift[k] > lift[1 - k] + 0.08 && !g.inAir) { g.legUp[k] = true; g.steps.push(now); g.lastStep = now; }
+    else if (g.legUp[k] && lift[k] < 0.06) g.legUp[k] = false;
   }
   g.steps = g.steps.filter(t => now - t < 1.6);
   let runT = 0;
   if (g.steps.length >= 2 && now - g.lastStep < 0.75) runT = clamp(0.4 + (g.steps.length / 1.6 - 1.2) / 2.4 * 0.6, 0.4, 1);
   if (g.crouch) runT = 0;
   g.move += (runT - g.move) * Math.min(1, dt * (runT > g.move ? 10 : 4));
-  // ---------- LEAN to steer (shoulders vs hips, sideways)
-  g.lean = (shC.x - hipC.x) / T;
-  const al = Math.abs(g.lean); g.turn = al < 0.06 ? 0 : Math.sign(g.lean) * clamp((al - 0.06) / 0.18, 0, 1);
-  // ---------- JUMP: hips shoot up fast, clearly above standing height (jogging bob stays below this)
-  const ankUp = g.feet ? Math.min(c.ankleY - I[27].y, c.ankleY - I[28].y) / T : 1;
-  if (!g.inAir && hipUp > 0.1 && hipVy < -0.7 && ankUp > 0.03 && Math.abs(lift[0] - lift[1]) < 0.25 && now - g.lastJump > 0.45) { g.inAir = true; g.lastJump = now; emit(s, 'jump'); }
-  if (g.inAir && (hipUp < 0.05 || now - g.lastJump > 1.2)) g.inAir = false;
-  // ---------- CROUCH (squat); standing back up fires crouchUp → super jump
-  const sq = hipUp < -0.16 && !g.inAir;
+  // ---------- LEAN to steer: tilt your shoulders (one shoulder lower than the other), head shift helps
+  const roll = Math.atan2(I[12].y - I[11].y, I[12].x - I[11].x);
+  g.lean = roll + clamp((I[0].x - shC.x) / T, -0.5, 0.5) * 0.35;
+  const al = Math.abs(g.lean); g.turn = al < 0.08 ? 0 : Math.sign(g.lean) * clamp((al - 0.08) / 0.2, 0, 1);
+  // ---------- JUMP: shoulders pop up fast (a hop or a quick bounce up on your toes)
+  if (!g.inAir && shUp > 0.1 && shVy < -0.8 && now - g.lastJump > 0.45) { g.inAir = true; g.lastJump = now; emit(s, 'jump'); }
+  if (g.inAir && (shUp < 0.05 || now - g.lastJump > 1.0)) g.inAir = false;
+  // ---------- CROUCH: duck down (shoulders drop); popping back up fires crouchUp → super jump
+  const sq = shUp < -0.28 && !g.inAir;
   g.crouchT = sq ? g.crouchT + dt : 0;
   if (!g.crouch && g.crouchT > 0.12) g.crouch = true;
-  if (g.crouch && hipUp > -0.08) { g.crouch = false; emit(s, 'crouchUp'); }
-  // slow re-baseline while standing still (players drift closer / further)
-  if (c.done && !g.inAir && !g.crouch && g.feet && now - g.lastStep > 1.5 && Math.abs(hipVy) < 0.3) {
-    c.ankleY += (Math.max(I[27].y, I[28].y) - c.ankleY) * 0.04; c.hipY += (hipC.y - c.hipY) * 0.04; c.torso += (torso - c.torso) * 0.03;
-    for (let k = 0; k < 2; k++) if (vis(25 + k)) c.kneeR[k] += ((I[25 + k].y - hipC.y) / torso - c.kneeR[k]) * 0.04;
+  if (g.crouch && shUp > -0.14) { g.crouch = false; emit(s, 'crouchUp'); }
+  // slow re-baseline while standing still
+  if (c.done && !g.inAir && !g.crouch && now - g.lastStep > 1.5 && Math.abs(shVy) < 0.3 && Math.abs(shUp) < 0.2) {
+    c.shY += (shC.y - c.shY) * 0.03;
+    for (let k = 0; k < 2; k++) if (vis(25 + k) && vis(23 + k)) c.kneeR[k] += ((I[25 + k].y - I[23 + k].y) / T - c.kneeR[k]) * 0.04;
   }
   // ---------- ARMS (2D in torso units; y up = positive)
   const sh2 = [I[11], I[12]], wr2 = [I[15], I[16]], nose = I[0];
@@ -960,7 +973,8 @@ function computeGestures(s, dt, now) {
     const wide = out2[0] > 0.45 && out2[1] > 0.45;
     const vertical = Math.abs(v2[k].y) > 1.6 * Math.abs(v2[k].x) && r2[k].y > 0.05 && rel[k].z < 0.3;
     const inward = out2[k] < 0.1 && rel[k].z < 0.2;
-    if (height && (p3 || p2) && !toFace && !wide && !vertical && !inward && now - g.punchT[k] > 0.28) {
+    const pumping = Math.abs(v2[k].y) > 1.3 * Math.abs(v2[k].x) && rel[k].z < 0.35 && r2[k].y < 0.1;
+    if (height && (p3 || p2) && !toFace && !wide && !vertical && !inward && !pumping && now - g.punchT[k] > 0.28) {
       g.punchT[k] = now; const power = clamp(Math.max((outSp - 1.3) / 2.2, (sp2 - 4) / 6), 0, 1);
       (g.pend ||= []).push({ k, t: now, power });
     }
@@ -999,7 +1013,8 @@ function computeGestures(s, dt, now) {
   if (aboveSh[0] && aboveSh[1]) g.lastHigh = now;
   if (wv[0] && wv[1] && v2[0].y > 3 && v2[1].y > 3 && now - g.lastHigh < 0.7 && r2[0].y < 0.1 && r2[1].y < 0.1 && now - g.lastSlam > 1) { g.lastSlam = now; g.lastHigh = -9; emit(s, 'slam'); }
   // ---------- single arm raised (thread)
-  for (let k = 0; k < 2; k++) g.armUp[k] = wv[k] && (r2[k].y > 0.3 || (g.armUp[k] && r2[k].y > 0.12));  // hysteresis: easy to keep up
+  const faceBoth = nearFace(0) && nearFace(1);
+  for (let k = 0; k < 2; k++) g.armUp[k] = wv[k] && !g.block && !faceBoth && (r2[k].y > 0.3 || (g.armUp[k] && r2[k].y > 0.12));  // hysteresis: easy to keep up
   // ---------- REACH / POINT one arm (sideways in 2D, or forward in 3D) and PLANE (both arms out)
   const side = k => wv[k] && Math.abs(r2[k].y) < 0.35 && out2[k] > 0.55;
   const fwdW = k => wv[k] && rel[k].z > 0.25 && Math.abs(rel[k].y) < 0.3 && ext[k] > 0.62 * A && !aboveSh[k];
@@ -1012,7 +1027,7 @@ function computeGestures(s, dt, now) {
   g.pitch = clamp(((r2[0].y + r2[1].y) / 2) / 0.4, -1, 1);
   g.armsDown = wv[0] && wv[1] && r2[0].y < -0.6 && r2[1].y < -0.6 && out2[0] < 0.5 && out2[1] < 0.5;
   // ---------- SPIN: torso goes side-on twice, or you turn your back and come round again
-  const shWr = Math.abs(I[11].x - I[12].x) / Math.max(0.02, c.shW);
+  const shWr = shWnow / Math.max(0.02, c.unit / 1.5);
   const so = shWr < 0.45;
   if (so && !g.sideOn) { g.sideOnTimes.push(now); g.sideOnTimes = g.sideOnTimes.filter(t => now - t < 3.5); if (g.sideOnTimes.length >= 2 && now - g.lastSpin > 3) { g.lastSpin = now; g.sideOnTimes = []; emit(s, 'spin'); } }
   g.sideOn = so;
@@ -1020,16 +1035,17 @@ function computeGestures(s, dt, now) {
   if (!backTurned && I[0].v > 0.7 && now - g.sawBack < 3 && now - g.sawBack > 0.15 && now - g.lastSpin > 3) { g.lastSpin = now; g.sawBack = -9; g.sideOnTimes = []; emit(s, 'spin'); }
   // ---------- menu cursor (raised hand, measured relative to the body so both players can reach every card)
   const hk = I[15].y < I[16].y ? 15 : 16, h = I[hk];
-  g.cursor.raised = I[hk].v > 0.5 && h.y < hipC.y - T * 0.1;
+  g.cursor.raised = I[hk].v > 0.5 && h.y < shC.y + T * 0.45;
   g.cursor.x = clamp(0.5 + (h.x - shC.x) / (T * 2.2), 0, 1); g.cursor.y = clamp(0.5 + (h.y - shC.y) / (T * 1.6), 0, 1);
   g.bothUp = overhead[0] && overhead[1];
   // ---------- calibration: arms relaxed, feet visible
+  // ---------- calibration: raise BOTH hands above your head and hold 1.5 s (proves we can see your hands)
   if (CAL.active && !c.done) {
-    const relaxed = r2[0].y < -0.45 && r2[1].y < -0.45;
-    if (g.feet && relaxed) {
-      c.acc = c.acc || { a: 0, n: 0 }; c.acc.a += (ext[0] + ext[1]) / 2; c.acc.n++;
-      c.prog += dt / 3;
-      if (c.prog >= 1) { c.done = true; c.armLen = clamp(c.acc.a / c.acc.n, 0.4, 0.75); c.torso = torso; c.hipY = hipC.y; c.ankleY = Math.max(I[27].y, I[28].y); c.shW = Math.abs(I[11].x - I[12].x); c.kneeR = [(I[25].y - hipC.y) / torso, (I[26].y - hipC.y) / torso]; AU.play('select'); }
+    const up = overhead[0] && overhead[1] && g.upper;
+    if (up) {
+      c.acc = c.acc || { a: 0, n: 0, w: 0, y: 0 }; c.acc.a += (ext[0] + ext[1]) / 2; c.acc.w += shWnow; c.acc.y += shC.y; c.acc.n++;
+      c.prog += dt / 1.5;
+      if (c.prog >= 1) { c.done = true; c.armLen = clamp(c.acc.a / c.acc.n, 0.4, 0.75); c.unit = c.acc.w / c.acc.n * 1.5; c.shY = c.acc.y / c.acc.n; c.kneeR = [0, 1].map(k => (I[25 + k].y - I[23 + k].y) / c.unit); AU.play('select'); }
     } else c.prog = Math.max(0, c.prog - dt * 0.5);
   }
   // ---------- debug label
@@ -1037,7 +1053,7 @@ function computeGestures(s, dt, now) {
   if (g.move > 0.05) L.push('RUN ' + (g.move * 100 | 0) + '% (' + g.steps.length + ' steps)'); if (g.turn) L.push(g.turn > 0 ? 'LEAN R' : 'LEAN L'); if (g.camYaw) L.push('TWIST ' + (g.camYaw > 0 ? 'R' : 'L'));
   if (g.inAir) L.push('JUMP'); if (g.crouch) L.push('CROUCH'); if (g.block) L.push('BLOCK'); if (g.tposeT > 0) L.push('PLANE ' + g.tposeT.toFixed(1));
   if (g.reach >= 0) L.push((g.reach ? 'POINT R' : 'POINT L') + ' ' + g.reachT.toFixed(1)); if (g.armUp[0]) L.push('ARM UP L'); if (g.armUp[1]) L.push('ARM UP R');
-  if (g.armsUpT > 0) L.push('ARMS UP'); if (!g.feet) L.push('NO FEET');
+  if (g.armsUpT > 0) L.push('ARMS UP'); if (!g.hands) L.push('HANDS NOT VISIBLE');
   g.label = L.join(' · ') || 'IDLE';
 }
 function takeEvents(s) { const e = s.events; s.events = []; return e; }
@@ -1064,7 +1080,7 @@ const HEROES = [
     desc: 'Reach one hand toward an object and hold to lift it, then push forward to throw. Both hands pushed forward = shockwave. Arms raised overhead = floating rock shield.', stat: 'HP 100 · SPEED ★★ · POWER ★★★' },
   { id: 'sp', name: 'FLICKER', cls: 'SPEEDSTER', main: 0xe8640e, sec: 0x22232a, acc: 0xffe040, hp: 95, speed: 33, jump: 13, mass: 0.9, size: 0.96,
     powers: [{ n: 'BLUR COMBO', i: '»', cd: 5 }, { n: 'TORNADO', i: '↻', cd: 10 }, { n: 'SONIC BOOM', i: '≋', cd: 6 }], ultN: 'HYPER BARRAGE',
-    desc: 'Jogging is 3× faster with light trails. Rapid punches = blur combo. Spin your body around once = tornado that drags the enemy in. Both arms thrust = sonic boom.', stat: 'HP 95 · SPEED ★★★★★ · POWER ★★' },
+    desc: 'Runs 3× faster with light trails. Rapid punches = blur combo. Spin your body around once = tornado that drags the enemy in. Both arms thrust = sonic boom.', stat: 'HP 95 · SPEED ★★★★★ · POWER ★★' },
   { id: 'ti', name: 'BULWARK', cls: 'TITAN', main: 0x6e727c, sec: 0x34363e, acc: 0xff5a1a, hp: 150, speed: 9, jump: 12, mass: 2.6, size: 1.35,
     powers: [{ n: 'GROUND POUND', i: '▼', cd: 6 }, { n: 'GRAB & THROW', i: '✊', cd: 5 }, { n: 'MEGA LEAP', i: '⇮', cd: 3 }], ultN: 'EARTHQUAKE',
     desc: 'Squat and release to leap across whole blocks. Slam both arms down = ground-pound crater. Hug your arms in = grab the enemy hero and throw them.', stat: 'HP 150 · SPEED ★ · POWER ★★★★★' },
@@ -1718,7 +1734,8 @@ function animateHero(h, dt, I) {
 const FIG = {
   idle: { a: [[34, 45], [32, 62], [66, 45], [68, 62]] },
   run: { a: [[32, 40], [38, 30], [68, 46], [62, 56]], l: [[40, 74], [44, 92], [56, 88], [57, 112]], txt: '↕ knees' },
-  lean: { rot: 14, txt: '⟲ ⟳' },
+  pump: { a: [[30, 42], [36, 30], [70, 46], [64, 60]], txt: '↕ pump arms ↕', ghost: [[30, 46], [36, 60], [70, 42], [64, 30]] },
+  lean: { rot: 14, txt: 'tilt shoulders' },
   jump: { up: 14, a: [[30, 16], [26, 2], [70, 16], [74, 2]], l: [[40, 80], [46, 96], [60, 80], [54, 96]], txt: '⇡' },
   squat: { sq: 18, l: [[34, 88], [42, 110], [66, 88], [58, 110]], a: [[36, 52], [44, 60], [64, 52], [56, 60]], txt: '⇣ then ⇡' },
   punch: { a: [[34, 45], [40, 34], [76, 29], [94, 29]], txt: 'fast →', burst: [96, 29] },
@@ -1760,13 +1777,13 @@ const acc = (st, on, dt, need) => (st.a = (st.a || 0) + (on ? dt : 0)) >= need;
 function tutSteps(h, i) {
   const k = KT[i], id = h.def.id;
   const S = [
-    { t: 'RUN', fig: 'run', cam: 'Jog in place — lift your knees high. Jog faster to run faster.', key: `Hold ${k.run}`, s: 'jog in place', chk: (h, I, st, dt) => acc(st, I.move > 0.4, dt, 1.5) },
-    { t: 'STEER', fig: 'lean', cam: 'While jogging, lean your upper body left or right to turn. Twist your shoulders to look around.', key: `${k.steer} to turn`, s: 'lean left / right', chk: (h, I, st, dt) => acc(st, Math.abs(I.turn) > 0.4, dt, 1) },
-    { t: 'JUMP', fig: 'jump', cam: 'Do a real jump — both feet off the floor.', key: `Press ${k.jump}`, s: 'real jump', chk: (h, I) => I.jump },
-    { t: id === 'ti' ? 'MEGA LEAP' : 'SUPER JUMP', fig: 'squat', cam: 'Squat down, hold for a second, then stand up fast to launch high.' + (id === 'ti' ? ' Bulwark leaps across whole blocks!' : ''), key: `Hold ${k.crouch}, then let go`, s: 'squat, then stand up', chk: h => h.didSuper },
+    { t: 'RUN', fig: 'pump', cam: 'Pump your arms like you are running (hands swinging up and down, elbows bent). Faster pumping = faster running.', key: `Hold ${k.run}`, s: 'pump arms like running', chk: (h, I, st, dt) => acc(st, I.move > 0.4, dt, 1.5) },
+    { t: 'STEER', fig: 'lean', cam: 'Tilt your shoulders — drop one shoulder lower than the other (like leaning into a turn) to steer that way. Twist your shoulders to look around.', key: `${k.steer} to turn`, s: 'tilt shoulders left / right', chk: (h, I, st, dt) => acc(st, Math.abs(I.turn) > 0.4, dt, 1) },
+    { t: 'JUMP', fig: 'jump', cam: 'Hop up — a quick bounce up on your toes is enough. The camera watches your shoulders.', key: `Press ${k.jump}`, s: 'quick hop up', chk: (h, I) => I.jump },
+    { t: id === 'ti' ? 'MEGA LEAP' : 'SUPER JUMP', fig: 'squat', cam: 'Duck down (bend your knees so your shoulders drop), hold a second, then pop back up fast to launch high.' + (id === 'ti' ? ' Bulwark leaps across whole blocks!' : ''), key: `Hold ${k.crouch}, then let go`, s: 'duck down, pop up', chk: h => h.didSuper },
     { t: 'PUNCH', fig: 'punch', cam: 'Throw a fast punch straight at the screen. Up close, a hard punch sends them flying.', key: `Press ${k.punch}`, s: 'fast punch at the screen', chk: (h, I) => I.punch },
     { t: 'BLOCK', fig: 'block', cam: 'Cross your forearms in front of your face and hold.', key: `Hold ${k.block}`, s: 'forearms crossed at face', chk: (h, I, st, dt) => acc(st, h.block, dt, 0.6) },
-    { t: 'CLIMB', fig: 'run', cam: 'Steer toward a building and keep jogging straight into its wall — you run right up it onto the roof.', key: `Steer at a building, hold ${k.run}`, s: 'run into a wall', chk: (h, I, st, dt) => acc(st, h.wallRun, dt, 0.4) || h.pos.y > 6 },
+    { t: 'CLIMB', fig: 'run', cam: 'Steer toward a building and keep pumping your arms straight into its wall — you run right up it onto the roof.', key: `Steer at a building, hold ${k.run}`, s: 'run into a wall', chk: (h, I, st, dt) => acc(st, h.wallRun, dt, 0.4) || h.pos.y > 6 },
   ];
   const P = (n, fig, cam, kk, s, chk) => S.push({ t: n, fig, cam, key: kk, s, chk });
   const tried = j => h => h.tried && h.tried[j];
@@ -1790,7 +1807,7 @@ function tutSteps(h, i) {
     P('LAND', 'armDown', 'Drop both arms to your sides to stop flying.', `Press ${k.p[2]}`, 'drop arms', h => !h.flying);
   } else if (id === 'th') {
     P('SHOOT A THREAD', 'armUp', 'Throw one arm UP and forward toward a tall building. A glowing thread sticks to it. (Face the buildings, not open sky.)', `Hold ${k.p[0]}`, 'one arm up at a building', h => !!(h.threads[0] || h.threads[1]));
-    P('SWING', 'armUp', 'Keep that arm raised — you swing like a pendulum. Jog while swinging to go faster.', `Keep holding ${k.p[0]}`, 'keep arm raised', (h, I, st, dt) => acc(st, !!(h.threads[0] || h.threads[1]), dt, 1.2));
+    P('SWING', 'armUp', 'Keep that arm raised — you swing like a pendulum. Pump your free arm or lean to steer the swing.', `Keep holding ${k.p[0]}`, 'keep arm raised', (h, I, st, dt) => acc(st, !!(h.threads[0] || h.threads[1]), dt, 1.2));
     P('LET GO', 'armDown', 'Drop your arm to let go — you fling forward with all that speed.', `Release ${k.p[0]}`, 'drop arm to fling', h => h.didFling);
     P('CHAIN SWINGS', 'otherArm', 'Raise the OTHER arm to grab the next building. Alternate arms to travel fast.', `Tap ${k.p[0]} again (switches arm)`, 'alternate arms', h => (h.threadCount || 0) >= 2);
     P('THREAD YANK', 'bothPush', 'Thrust BOTH arms at the enemy to yank them to you.', `Press ${k.p[1]}`, 'both arms thrust at enemy', tried(1));
@@ -1891,7 +1908,7 @@ function updateHUD() {
     const s = POSE.slots[i];
     U.dot.classList.toggle('ok', pose && s.tracked);
     let warn = '';
-    if (pose && POSE.ready) { if (!s.tracked) warn = 'PLAYER ' + (i + 1) + ' NOT DETECTED<br><small>stand in your half of the camera</small>'; else if (!s.g.feet) warn = '⚠ STEP BACK<br><small>feet must be visible to run &amp; jump</small>'; }
+    if (pose && POSE.ready) { if (!s.tracked) warn = 'PLAYER ' + (i + 1) + ' NOT DETECTED<br><small>stand in your half of the camera</small>'; else if (!s.g.hands) warn = '✋ HANDS NOT VISIBLE<br><small>step back a little so your hands are in view</small>'; }
     U.warn.innerHTML = warn; U.warn.classList.toggle('hidden', !warn);
     const mv = (GAME.state === 'match' || GAME.state === 'countdown') && GAME.movesT > 0; U.moves.classList.toggle('hidden', !mv); if (mv && !U.moves.dataset.on) { U.moves.innerHTML = movesHTML(h, i); U.moves.dataset.on = 1; }
     const gShow = pose && s.g.lastEv && performance.now() - s.g.lastEvT < 900; U.gev.classList.toggle('hidden', !gShow); if (gShow) { const t = '▶ ' + s.g.lastEv.split(' ')[0].replace(/([A-Z])/g, ' $1').toUpperCase(); if (U.gev.textContent !== t) U.gev.textContent = t; }
@@ -2031,7 +2048,7 @@ function updateCalib() {
     const el = GAME.calEls[i]; if (!el) continue; const s = POSE.slots[i];
     drawCamMini(el.querySelector('canvas'), i, GAME.solo);
     el.querySelector('.ring i').style.width = (s.cal.done ? 100 : s.cal.prog * 100) + '%';
-    el.querySelector('.st').innerHTML = s.cal.done ? '✔ CALIBRATED' : !s.tracked ? 'NOT DETECTED — step into ' + (GAME.solo ? 'view' : (i ? 'the right' : 'the left') + ' half') : !s.g.feet ? '<span style="color:#f55;font-weight:800">⚠ STEP BACK — feet not visible</span>' : 'Hold still, arms at your sides…';
+    el.querySelector('.st').innerHTML = s.cal.done ? '✔ CALIBRATED' : !s.tracked ? 'NOT DETECTED — step into ' + (GAME.solo ? 'view' : (i ? 'the right' : 'the left') + ' half') : !s.g.upper ? 'Face the camera — head &amp; shoulders in view' : !s.g.hands ? '<span style="color:#f55;font-weight:800">✋ Hands not visible — step back a little</span>' : '🙌 RAISE BOTH HANDS above your head and hold…';
     if (!s.cal.done) all = false;
   }
   if (KEDGE.has('Enter')) { all = true; for (const s of POSE.slots) s.cal.done = true; }
