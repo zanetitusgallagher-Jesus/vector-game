@@ -1,3 +1,4 @@
+import AirHandsCore
 import AppKit
 import SwiftUI
 
@@ -30,7 +31,7 @@ struct MenuContent: View {
         Button("Calibrate…") { model.openCalibration() }
         Button("Settings…") { model.openSettings() }
             .keyboardShortcut(",")
-        Toggle("Debug Overlay", isOn: $model.store.value.debugOverlay)
+        Toggle("Debug Overlay", isOn: Binding(get: { model.store.value.debugOverlay }, set: { model.store.value.debugOverlay = $0 }))
         if model.permissions.accessibility != .granted || model.permissions.inputMonitoring != .granted
             || model.permissions.camera != .granted {
             Button("⚠︎ Permissions needed…") { model.openOnboarding() }
