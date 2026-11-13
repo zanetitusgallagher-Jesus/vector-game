@@ -1,8 +1,10 @@
 name: AirHands (macOS app)
 on:
   push:
-    paths: ["airhands/**", ".github/workflows/airhands.yml"]
+    # Listing tags alone would stop branch pushes from triggering, so list both.
+    branches: ["**"]
     tags: ["airhands-v*"]
+    paths: ["airhands/**", ".github/workflows/airhands.yml"]
   pull_request:
     paths: ["airhands/**", ".github/workflows/airhands.yml"]
   workflow_dispatch:
