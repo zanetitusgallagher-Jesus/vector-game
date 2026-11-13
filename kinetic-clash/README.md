@@ -27,4 +27,5 @@ Open it from any static server (camera access needs `https://` or `localhost`). 
   - P2: arrows, Enter jump, Right Shift crouch, K block, L punch, I/O/P powers, U ultimate.
 - **Debug:** D shows the gesture debug label in camera mode. In keyboard mode use F3 or the backquote key (`).
 - **Exit:** Esc returns to the title.
+- **Training:** before each match, every player goes through a short guided tutorial. It shows a stick-figure picture of each move and waits until the game sees you do it. Tab skips a step and Backspace skips the whole tutorial. You can turn it off on the title screen. During the match, a moves list stays on screen for the first 25 seconds; press H to show or hide it.
 - **First to 5 KOs wins**, followed by a replay of the final KO.
