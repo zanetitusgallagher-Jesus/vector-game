@@ -2,13 +2,14 @@ name: AirHands (macOS app)
 on:
   push:
     paths: ["airhands/**", ".github/workflows/airhands.yml"]
+    tags: ["airhands-v*"]
   pull_request:
     paths: ["airhands/**", ".github/workflows/airhands.yml"]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write   # only used to create a Release on airhands-v* tags
 jobs:
-  build-and-test:
+  build-test-package:
     runs-on: macos-15
     defaults:
       run:
@@ -21,11 +22,25 @@ jobs:
         run: brew install xcodegen
       - name: Core unit tests (swift test)
         run: ./scripts/test.sh
-      - name: Build app (ad-hoc signed)
-        run: |
-          set -o pipefail
-          ./scripts/build.sh --adhoc
       - name: Tests via Xcode scheme
         run: |
           set -o pipefail
           ./scripts/test.sh --xcode --adhoc
+      - name: Package AirHands.app (Release, universal)
+        run: |
+          set -o pipefail
+          ./scripts/package.sh --adhoc
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: AirHands
+          path: airhands/build/dist/AirHands.zip
+          if-no-files-found: error
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/airhands-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/dist/AirHands.zip \
+            --title "AirHands ${GITHUB_REF_NAME#airhands-v}" \
+            --notes-file INSTALL.md
