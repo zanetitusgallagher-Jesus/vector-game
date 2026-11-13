@@ -17,14 +17,16 @@ public struct SyntheticHand: Sendable {
     /// 0 = thumb at rest; 1 = thumb tip touching `pinchFinger`'s tip.
     public var pinch: Double
     public var pinchFinger: Finger
+    /// Extra fan-out of the fingers in radians (index left, ring/little right). 0 = relaxed.
+    public var spread: Double
     public var confidence: Double
 
     public init(wrist: Vec2 = Vec2(0.5, 0.7), size: Double = 0.18, rotation: Double = 0,
                 chirality: Chirality = .right, curl: [Double] = [0, 0, 0, 0, 0],
-                pinch: Double = 0, pinchFinger: Finger = .index, confidence: Double = 0.9) {
+                pinch: Double = 0, pinchFinger: Finger = .index, spread: Double = 0, confidence: Double = 0.9) {
         precondition(curl.count == 5)
         self.wrist = wrist; self.size = size; self.rotation = rotation; self.chirality = chirality
-        self.curl = curl; self.pinch = pinch; self.pinchFinger = pinchFinger; self.confidence = confidence
+        self.curl = curl; self.pinch = pinch; self.pinchFinger = pinchFinger; self.spread = spread; self.confidence = confidence
     }
 
     // MARK: Named poses
@@ -39,8 +41,21 @@ public struct SyntheticHand: Sendable {
     public static func fist(at wrist: Vec2 = Vec2(0.5, 0.7)) -> SyntheticHand {
         SyntheticHand(wrist: wrist, curl: [0.8, 1, 1, 1, 1])
     }
+    /// V sign: index + middle extended and spread apart.
     public static func peace(at wrist: Vec2 = Vec2(0.5, 0.7)) -> SyntheticHand {
-        SyntheticHand(wrist: wrist, curl: [0.8, 0, 0, 1, 1])
+        SyntheticHand(wrist: wrist, curl: [0.8, 0, 0, 1, 1], spread: 0.3)
+    }
+    /// Index + middle extended and held together: the scroll pose.
+    public static func twoFingers(at wrist: Vec2 = Vec2(0.5, 0.7)) -> SyntheticHand {
+        SyntheticHand(wrist: wrist, curl: [0.8, 0, 0, 1, 1], spread: -0.1)
+    }
+    /// Fist with the thumb pointing straight up.
+    public static func thumbsUp(at wrist: Vec2 = Vec2(0.5, 0.7)) -> SyntheticHand {
+        SyntheticHand(wrist: wrist, rotation: 0.85, curl: [0, 1, 1, 1, 1])
+    }
+    /// All five fingers straight and fanned out: the "stop" palm.
+    public static func stopPalm(at wrist: Vec2 = Vec2(0.5, 0.7)) -> SyntheticHand {
+        SyntheticHand(wrist: wrist, spread: 0.22)
     }
 
     // MARK: Model (isotropic units, hand size = 1, fingers toward -y)
@@ -79,7 +94,8 @@ public struct SyntheticHand: Sendable {
         pts[HandJoint.wrist.rawValue] = .zero
         for finger in Finger.allCases {
             let f = finger.rawValue
-            let dirRaw = Self.fingerDirections[f]
+            let fan: [Double] = [-1, -1, 0, 1, 2]
+            let dirRaw = Self.fingerDirections[f].rotated(by: spread * fan[f])
             var dir = dirRaw / dirRaw.length
             if finger == .thumb {
                 // A curled thumb swings across the palm toward the little finger.
