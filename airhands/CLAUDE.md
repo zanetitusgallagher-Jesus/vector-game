@@ -1,6 +1,6 @@
 # AirHands — hands-free gesture control for macOS
 
-Menu bar app (macOS 14+, Apple Silicon) that turns the built-in webcam into a pointer:
+Menu bar app (macOS 14+, Apple Silicon and Intel) that turns the built-in webcam into a pointer:
 the index finger moves the cursor, pinches click, and hand poses trigger system actions.
 Everything runs on-device; camera frames are never stored or sent anywhere (the Recorder
 saves landmark coordinates only).
@@ -26,121 +26,111 @@ cp Config/Local.xcconfig.example Config/Local.xcconfig   # then set DEVELOPMENT_
   A stable identity keeps Camera / Accessibility / Input Monitoring grants across rebuilds.
 - Not sandboxed (CGEvent posting + Accessibility API). Hardened runtime on, with the camera
   entitlement. `LSUIElement` = menu bar only.
-- CI: `.github/workflows/airhands.yml` (repo root) builds the app ad-hoc and runs the tests
-  on a macOS runner for every push touching `airhands/**`.
+- CI: `.github/workflows/airhands.yml` (repo root) runs the tests, builds a universal
+  ad-hoc-signed `AirHands.zip` (artifact) on every push touching `airhands/**`. Releases:
+  run the workflow manually with `release_tag` (e.g. `airhands-v0.6.0`) — this session cannot
+  push tags. Users install from the release (no Xcode).
 
 ## Architecture
 
 ```
-Camera (AVCaptureSession) ─▶ HandTracker (Vision) ─▶ HandSmoother (One Euro) ─┬▶ GestureEngine ─▶ ActionEngine
-        App/Pipeline            App/Pipeline            Core                  │      Core (M2)        App (M2)
-                                                                              ├▶ Overlay (App/Overlay)
-                                                                              └▶ LandmarkRecorder (Core)
+Camera ─▶ HandTracker ─▶ HandSmoother ─▶ GestureEngine ─▶ PointerController ─▶ ActionEngine ─▶ CGEvent / AX
+(AVFoundation) (Vision)   (One Euro)      (pure FSM)        (cursor math)        (OS actions)
+                                   └──▶ LandmarkRecorder          └──▶ main thread: Overlay, menu, windows
 ```
 
-Two halves:
+All per-frame work (tracking → gestures → cursor events) runs on the camera's serial output
+queue in `TrackingPipeline`, so the cursor never waits for the main thread. The main thread
+only draws the overlay and UI (and may skip frames; clicks and cursor moves never do).
 
-- **`Core/` — AirHandsCore** (Swift package, Foundation only, no Apple UI/media frameworks).
-  Everything that can be unit-tested lives here. Builds and tests on macOS and Linux.
-  - `Landmarks.swift` — `HandJoint` (21), `Finger`, `Chirality`, `HandObservation`,
-    `HandFrame`, `HandSkeleton.bones`. Coordinates: normalized 0…1, **origin top-left,
-    already mirrored** (what the user sees in a mirror). `aspectRatio` = image w/h.
-  - `HandGeometry.swift` — scale-invariant measures: hand size (wrist→middle MCP, in
-    aspect-corrected units), joint distances in hand sizes, pinch distance, finger
-    extension ratio, palm centre. All gesture thresholds use these units.
-  - `OneEuroFilter.swift` — scalar + 2D One Euro filter, `SmoothingParameters`
-    (minCutoff 1.2 Hz, beta 8, dCutoff 1 Hz — note beta is large because units are
-    normalized, not pixels).
-  - `HandSmoother.swift` — filters all 21 joints per hand, assigns stable `trackID`s
-    (nearest wrist, chirality preferred), drops tracks unseen for 0.3 s.
-  - `ScreenMapper.swift` — active zone (camera rect) → desktop in Quartz global coords
-    (top-left origin, y down = CGEvent space), clamped onto real displays.
-  - `Recorder.swift` — `LandmarkRecording` JSON (versioned), thread-safe `LandmarkRecorder`,
-    `LandmarkReplayer`.
-  - `SyntheticHand.swift` — generates landmark poses (open palm, point, fist, peace, pinch
-    amount, rotation, scale, chirality) + `SeededNoise` jitter, for tests and fixtures.
-  - `Stats.swift` — `RollingStats` (mean / percentile), `FPSMeter`.
-  - `airhands-synth` executable — writes synthetic recordings:
-    `cd Core && swift run airhands-synth point_sweep out.json`.
-- **`App/` — macOS app target** (AVFoundation, Vision, AppKit, SwiftUI).
-  - `Pipeline/CameraCapture.swift` — front camera, picks 640x480/1280x720 with the highest
-    fps (ties → smaller), YUV 420f, late frames discarded. `stop()` removes inputs/outputs
-    so the camera light turns off.
-  - `Pipeline/HandTracker.swift` — one reused `VNDetectHumanHandPoseRequest` (max 2 hands)
-    + `VNSequenceRequestHandler`. Converts Vision (bottom-left origin) → Core (top-left,
-    mirrored X). Joints < 0.2 confidence → confidence 0. Hands without wrist + middle MCP
-    are dropped.
-  - `Pipeline/TrackingPipeline.swift` — runs tracker + smoother + recorder on the camera
-    queue; at most one frame in flight to the main thread (drops rather than queues).
-  - `Overlay/` — one transparent click-through `NSPanel` per display (`.screenSaver` level,
-    all Spaces, full-screen auxiliary). Core Animation layers, no per-frame SwiftUI.
-    Reticle at the mapped index tip; debug HUD (bottom-right of the menu-bar display) with
-    camera-space skeleton (cyan = right, magenta = left, dot size = confidence, small grey
-    dots = raw unsmoothed points), active zone (dashed), keyboard zone (orange), stats.
-  - `AppModel.swift` — main-actor state, start/stop, permission prompt, latency stats,
-    recording to `~/Library/Application Support/AirHands/Recordings/`.
-  - `AirHandsApp.swift` — `MenuBarExtra` menu. `MenuBar/StatusIcon.swift` — icon per state.
+### `Core/` — AirHandsCore (pure Swift, Foundation only; `swift test` on macOS and Linux)
 
-Threading: camera queue does all per-frame work; main thread only draws. `AppModel` and
-`OverlayController` are `@MainActor`; `TrackingPipeline` is deliberately not.
+| File | What |
+|---|---|
+| `Landmarks.swift` | `HandJoint` (21), `Finger`, `Chirality`, `HandObservation`, `HandFrame`. Normalized coords, **top-left origin, mirrored**. |
+| `Geometry.swift` | `Vec2`, `Rect` (no CoreGraphics). |
+| `HandGeometry.swift` | Aspect-corrected, hand-size-normalized measures. |
+| `HandFeatures.swift` | Per-frame features (extension ratios, pinch distances, fan width, orientation, thumb direction) + `FingerStates` (hysteresis per finger) → `Pose` (point / two / open / fist / thumbsUp / none). |
+| `Hysteresis.swift` | `HysteresisGate` (enter/exit), `HoldTimer` (fires once per hold). |
+| `GestureEngine.swift` | The state machine. `process(HandFrame, suspended:) → GestureOutput` (events, pointer input, mode, progress). Handles paused mode, keyboard zone, lost-hand grace, two-hand arbitration, snap/right-click arbitration. |
+| `GestureConfig.swift` | `GestureKind` (all gestures) + every threshold / hold time. |
+| `PointerController.swift` | Pointer input → desktop cursor (absolute with glide / relative with acceleration, precision gain, lock, re-anchoring on source change). Also `TypingGate`, `ScrollMomentum`. |
+| `WindowPlanner.swift` | Throw target (other display / snap half / maximise), `CalibrationSession` (4 corners), `TransientDetector` (snap). |
+| `Settings.swift` | `AppSettings` (Codable, forward-compatible merge decode), `ActionKind`, `KeyCombo`, `GestureBinding` + default map. |
+| `OneEuroFilter.swift`, `HandSmoother.swift`, `ScreenMapper.swift`, `Recorder.swift`, `Stats.swift`, `SyntheticHand.swift` | as named. |
 
-Latency shown in the HUD = `CACurrentMediaTime()` after the overlay layers update minus the
-camera frame's presentation timestamp (both host clock). It excludes sensor exposure and
-display scan-out (~1 refresh).
+`airhands-synth`: `swift run airhands-synth probe` prints features for each synthetic pose
+(use it when changing thresholds); `swift run airhands-synth point_sweep out.json` writes fixtures.
 
-## Gesture map (defaults) and status
+### `App/` — macOS target
 
-| Gesture | Action | Status |
+- `Pipeline/CameraCapture.swift` — 640x480/720p at max fps, YUV, late frames dropped, `setMaxFPS` (battery saver), full teardown on stop (camera light off).
+- `Pipeline/HandTracker.swift` — reused `VNDetectHumanHandPoseRequest` (2 hands) + `VNSequenceRequestHandler`.
+- `Pipeline/TrackingPipeline.swift` — the per-frame loop; idle throttling (every other frame after 1.5 s without hands); latency + CPU measurement.
+- `Pipeline/ActionEngine.swift` — gesture events → actions: clicks (with click state for double click), drag (mouse down/dragged/up), pixel scroll + 120 Hz momentum, media keys (volume, play/pause), Mission Control binary (`1` = Show Desktop, `2` = App Exposé), ⌃←/→ Spaces, ⌘⇧4, ⌘= / ⌘-, hide all apps, custom shortcuts, window grab/throw.
+- `System/InputSynth.swift` — CGEvent posting; every event tagged with `InputSynth.marker` so the keyboard monitor ignores our own shortcuts.
+- `System/WindowMover.swift` — AX window under point (skips our overlay; CGWindowList fallback), get/set frame.
+- `System/SystemServices.swift` — permissions, `KeyboardMonitor` (listen-only CGEventTap, NSEvent fallback), Carbon `HotKey`, `Power` (IOKit), `LaunchAtLogin` (SMAppService), `SnapListener` (AVAudioEngine), `CPUMeter`.
+- `Overlay/` — per-display click-through panels; reticle (colour per mode, shrink as pinch closes, progress ring, click pulse), mode label, status pill (typing / paused), debug HUD.
+- `UI/` — `SettingsStore` (UserDefaults JSON), `WindowPresenter`, `SettingsView` (General, Pointer, Gestures remap, Tuning, Permissions), `CalibrationView` (+ live mirrored camera preview), `OnboardingView`.
+- `AppModel.swift` — wiring, status, permissions polling, battery polling, windows, recorder. `AirHandsApp.swift` — menu.
+
+Permissions: Camera (tracking), Accessibility (post events, move windows), Input Monitoring
+(typing auto-pause; NSEvent fallback works with Accessibility only), Microphone (snap only).
+
+## Gesture map (defaults; discrete ones remappable in Settings → Gestures)
+
+| Gesture | Action | Notes |
 |---|---|---|
-| POINT (index out, others curled), move | move cursor | M2 (reticle preview only in M1) |
-| Open / relaxed hand | clutch (cursor freezes) | M2 |
-| Thumb+index pinch tap | left click | M2 |
-| Thumb+index double pinch | double click | M2 |
-| Thumb+index pinch-hold + move | drag | M2 |
-| Thumb+middle pinch | right click | M3 |
-| Index+middle extended, move | scroll (momentum) | M3 |
-| Pinch + rotate (knob) | volume | M4 |
-| Open palm swipe ←/→ | switch Space (Ctrl+←/→) | M4 |
-| Open palm swipe ↑ / ↓ | Mission Control / Show Desktop | M4 |
-| Fist grab, move, release / throw | move window / other display or snap half | M4 |
-| Thumbs up 0.5 s | play/pause | M4 |
-| Peace sign 0.5 s | screenshot (Cmd+Shift+4) | M4 |
-| Palm to camera, still 1 s | pause/resume AirHands | M4 |
-| Both hands pinch, spread/close | zoom (Cmd+= / Cmd+-) | M5 |
-| Both palms push forward | App Exposé | M5 |
-| Finger snap (pose + mic transient) | hide all apps (toggle) | M6 stretch |
+| POINT (index out, others curled) | move cursor | precision gain as pinch closes; cursor locked while pinch is down |
+| Open / relaxed hand | clutch | cursor stops |
+| Thumb+index pinch tap | left click | ≥50 ms; clicks on release; second tap within 0.4 s = double click |
+| Pinch hold (0.55 s) or pinch + move (0.15 hand) | drag | mouse down/dragged/up |
+| Thumb+middle pinch | right click | deferred 150 ms when snap is on |
+| Index+middle together, move | scroll | momentum on release |
+| Pinch + rotate (18° to start, 12° per step) | volume up/down | clockwise = up |
+| Open palm swipe ←/→ | Space left/right (⌃←/⌃→) | 1.3 hand sizes in 0.35 s; confirmed 80 ms later; 0.8 s cooldown |
+| Open palm swipe ↑ / ↓ | Mission Control / Show Desktop | hand must be tracked ≥ 0.5 s (raising a hand is not a swipe) |
+| Fist 0.25 s, move, release | move window; fast release throws (other display, else snap half, up = maximise) | |
+| Thumbs up 0.5 s | play/pause | |
+| Peace sign (V, spread) 0.5 s | screenshot ⌘⇧4 | fingers together = scroll instead |
+| Fanned palm held still 1 s | pause / resume AirHands | only gesture recognised while paused |
+| Both hands pinch, spread / close | zoom ⌘= / ⌘- | per 15 % distance change; zoom pinches never click |
+| Both open palms push forward (+25 % size in 0.6 s) | App Exposé | |
+| Finger snap (thumb+middle release + mic transient) | hide all apps | off by default; needs microphone |
 
-Typing auto-pause (M3): any keydown suspends pointer + gestures; resume after 700 ms with no
-keys **and** a hand raised in the active zone. Hands in the bottom keyboard zone (default
-20 % of the frame) are ignored.
+Typing auto-pause: any key press suspends everything (drags are released); resumes after
+0.7 s without keys **and** a hand raised above the keyboard zone (bottom 20 % of the frame,
+where hands are ignored anyway).
 
-Design rules for GestureEngine (M2+): pure state machine over `HandFrame`s, no OS deps;
-every threshold in hand-size units with hysteresis (e.g. pinch enter 0.25 / exit 0.38) and
-minimum hold times; prefer a missed gesture over a false trigger. Tune thresholds from user
-recordings (menu → Record Landmarks…), not guesses.
+Toggle: menu bar icon (grey off / white on / cyan tracking / amber typing / grey pause),
+global hotkey ⌃⌥Space (remappable), menu "Pause Gestures".
+
+**Control Center tile: not built.** Third-party Control Center controls on macOS require the
+macOS 26 SDK (WidgetKit `ControlWidget`) plus a properly signed app extension; CI has Xcode
+16.4 / macOS 15 SDK and builds are ad-hoc signed, so the system would not load the extension.
+Revisit with Xcode 26 + a Developer ID.
 
 ## Milestones
 
-1. ✅ code complete: camera + hand skeleton debug overlay, smoothing, recorder, menu toggle.
-   Needs on-device verification (see below).
-2. Finger cursor with smoothing, clutch, pinch click and drag.
-3. Scroll, right click, typing auto-pause, menu bar toggle polish, global hotkey.
-4. System gestures: Spaces, Mission Control, Show Desktop, window grab/throw, volume.
-5. Two-hand gestures, Settings window, remapping, calibration, onboarding.
-6. Polish: reticle animations, latency/CPU tuning, battery saver, Control Center tile, snap.
+All six are implemented and unit-tested at the GestureEngine level; none has been verified
+on a real Mac yet. Thresholds are tuned against synthetic hands only — real recordings
+(menu → Record Landmarks…) should replace them as fixtures.
 
-## Manual test checklist (milestone 1)
+## Manual test checklist
 
-- Menu bar shows a grey crossed-out hand. Click → toggle **AirHands** on → camera prompt on
-  first run → green camera light on.
-- Debug HUD bottom-right: skeleton follows your hand; moving your hand right moves it right
-  (mirrored). Left hand magenta, right cyan. Two hands at once both draw.
-- Cyan reticle follows the index fingertip across the screen(s), including over full-screen
-  apps and other Spaces; clicks pass straight through the overlay.
-- HUD stats: fps ≈ camera max, latency < 60 ms, vision ms.
-- Menu icon turns cyan while a hand is tracked.
-- Record Landmarks… → perform → Stop Recording → Show Recordings opens a JSON file.
-- Toggle off → overlay disappears and the green camera light goes off within ~1 s.
+1. First launch: onboarding window; grant Camera, Accessibility, Input Monitoring.
+2. Point: cursor follows; open hand: cursor stops; pinch tap clicks; double pinch double-clicks;
+   pinch-hold-move selects text / drags a file; cursor does not jump on pinch.
+3. Thumb+middle: context menu. Two fingers up/down: scrolls with momentum.
+4. Type in any app: pill "typing — gestures paused"; hand resting low never moves the cursor.
+5. ⌃⌥Space toggles; menu icon colours change.
+6. Swipes (Spaces, Mission Control, Show Desktop), pinch-rotate volume, fist-grab a window
+   and throw it, thumbs up (music), peace (screenshot crosshair), fanned palm 1 s (pause pill).
+7. Two-hand pinch spread in a browser zooms; both palms forward → App Exposé.
+8. Settings: remap peace → custom shortcut; calibration wizard; battery saver shows
+   "(battery)" in the debug HUD when unplugged; debug HUD latency < 60 ms, CPU < 25 %.
+9. Off → camera light goes off.
 
 ## Conventions
 
