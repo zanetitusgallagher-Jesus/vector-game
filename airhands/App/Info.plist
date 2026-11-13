@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.6.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>6</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>AirHands watches your hands through the camera so you can control your Mac with gestures. Video is processed on this Mac only and is never stored or sent anywhere.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Only used for the optional finger-snap gesture: AirHands listens for the click of a snap. Audio is analysed in memory and never recorded or sent anywhere.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
 </dict>

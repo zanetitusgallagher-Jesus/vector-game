@@ -5,9 +5,32 @@ import QuartzCore
 /// What the overlay should show this frame. Points are in Quartz global coordinates.
 struct OverlayState {
     var reticle: CGPoint?
-    /// Mode / status label shown under the reticle ("tracking", "paused", ...).
+    /// Mode / status label shown under the reticle ("drag", "scroll", ...).
     var modeLabel: String?
+    var style: ReticleStyle = .pointing
+    /// 0...1 progress ring (pinch approaching, hold timers).
+    var progress: Double = 0
+    /// Play the click pulse this frame.
+    var pulse = false
+    /// Status pill at the top of the main display ("typing — paused").
+    var pill: String?
     var debug: DebugState?
+}
+
+enum ReticleStyle {
+    case pointing, clutch, pinch, drag, scroll, grab, knob, zoom, paused
+
+    var color: NSColor {
+        switch self {
+        case .pointing, .pinch: OverlayView.cyan
+        case .clutch: NSColor.white.withAlphaComponent(0.55)
+        case .drag: NSColor.systemOrange
+        case .scroll: NSColor.systemGreen
+        case .grab: NSColor.systemPurple
+        case .knob, .zoom: NSColor.systemYellow
+        case .paused: NSColor.systemGray
+        }
+    }
 }
 
 struct DebugState {
@@ -23,11 +46,16 @@ final class OverlayView: NSView {
     /// This view's screen rect in Quartz global coordinates.
     var screenRect: CGRect = .zero
     var showsHUD = false
+    /// The display with the menu bar (status pill lives there).
+    var isPrimary = false
 
     private let root = CALayer()
     private let reticleRing = CAShapeLayer()
     private let reticleDot = CAShapeLayer()
     private let modeText = CATextLayer()
+    private let progressRing = CAShapeLayer()
+    private let pillLayer = CATextLayer()
+    private var lastStyle: ReticleStyle?
 
     private let hud = CALayer()
     private let hudCamera = CALayer()
@@ -54,7 +82,7 @@ final class OverlayView: NSView {
         buildReticle()
         buildHUD()
         let scale = NSScreen.main?.backingScaleFactor ?? 2
-        for l in [modeText, hudText] { l.contentsScale = scale }
+        for l in [modeText, hudText, pillLayer] { l.contentsScale = scale }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -67,7 +95,7 @@ final class OverlayView: NSView {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         let scale = window?.backingScaleFactor ?? 2
-        for l in [modeText, hudText] { l.contentsScale = scale }
+        for l in [modeText, hudText, pillLayer] { l.contentsScale = scale }
     }
 
     private func buildReticle() {
@@ -87,7 +115,22 @@ final class OverlayView: NSView {
         modeText.foregroundColor = Self.cyan.cgColor
         modeText.alignmentMode = .center
         modeText.bounds = CGRect(x: 0, y: 0, width: 160, height: 16)
-        for l in [reticleRing, reticleDot, modeText] as [CALayer] { l.isHidden = true; root.addSublayer(l) }
+        let pr: CGFloat = 23
+        progressRing.path = CGPath(ellipseIn: CGRect(x: -pr, y: -pr, width: 2 * pr, height: 2 * pr), transform: nil)
+        progressRing.fillColor = nil
+        progressRing.strokeColor = NSColor.white.withAlphaComponent(0.9).cgColor
+        progressRing.lineWidth = 3
+        progressRing.lineCap = .round
+        progressRing.strokeEnd = 0
+        // Start the ring at 12 o'clock.
+        progressRing.setAffineTransform(CGAffineTransform(rotationAngle: -.pi / 2))
+        pillLayer.fontSize = 12
+        pillLayer.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        pillLayer.foregroundColor = NSColor.black.cgColor
+        pillLayer.backgroundColor = NSColor.systemYellow.withAlphaComponent(0.92).cgColor
+        pillLayer.cornerRadius = 11
+        pillLayer.alignmentMode = .center
+        for l in [reticleRing, reticleDot, progressRing, modeText, pillLayer] as [CALayer] { l.isHidden = true; root.addSublayer(l) }
     }
 
     private func buildHUD() {
@@ -142,15 +185,40 @@ final class OverlayView: NSView {
         // Reticle: only on the screen it lands on.
         if let p = state.reticle, screenRect.contains(p) {
             let local = CGPoint(x: p.x - screenRect.minX, y: p.y - screenRect.minY)
+            if lastStyle != state.style {
+                lastStyle = state.style
+                let c = state.style.color
+                reticleRing.strokeColor = c.cgColor
+                reticleRing.shadowColor = c.cgColor
+                reticleRing.fillColor = c.withAlphaComponent(0.08).cgColor
+                modeText.foregroundColor = c.cgColor
+                reticleDot.isHidden = state.style == .clutch
+            }
             reticleRing.position = local
             reticleDot.position = local
-            modeText.position = CGPoint(x: local.x, y: local.y + 30)
+            progressRing.position = local
+            modeText.position = CGPoint(x: local.x, y: local.y + 34)
             modeText.string = state.modeLabel
+            // Ring shrinks slightly as a pinch closes: a physical "press" feel.
+            let squeeze = state.style == .pointing || state.style == .pinch ? 1 - 0.25 * state.progress : 1
+            reticleRing.setAffineTransform(CGAffineTransform(scaleX: squeeze, y: squeeze))
+            progressRing.strokeEnd = state.progress
+            progressRing.isHidden = state.progress < 0.02
             reticleRing.isHidden = false
-            reticleDot.isHidden = false
-            modeText.isHidden = state.modeLabel == nil
+            if state.style != .clutch { reticleDot.isHidden = false }
+            modeText.isHidden = state.modeLabel == nil || state.modeLabel == ""
+            if state.pulse { playPulse(at: local) }
         } else {
-            reticleRing.isHidden = true; reticleDot.isHidden = true; modeText.isHidden = true
+            reticleRing.isHidden = true; reticleDot.isHidden = true; modeText.isHidden = true; progressRing.isHidden = true
+        }
+
+        if showsHUD || isPrimary, let pill = state.pill {
+            pillLayer.string = pill
+            let w = CGFloat(pill.count) * 7.5 + 28
+            pillLayer.frame = CGRect(x: (bounds.width - w) / 2, y: 34, width: w, height: 22)
+            pillLayer.isHidden = false
+        } else {
+            pillLayer.isHidden = true
         }
 
         guard showsHUD, let debug = state.debug else { hud.isHidden = true; return }
@@ -161,6 +229,31 @@ final class OverlayView: NSView {
         hudText.frame = CGRect(x: 10, y: Self.hudSize.height + 6, width: size.width - 20, height: Self.hudTextHeight - 10)
         drawCamera(debug)
         hudText.string = debug.lines.joined(separator: "\n")
+    }
+
+    /// Expanding ring that fades out: click feedback.
+    private func playPulse(at p: CGPoint) {
+        let ring = CAShapeLayer()
+        let r: CGFloat = 16
+        ring.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r), transform: nil)
+        ring.position = p
+        ring.fillColor = nil
+        ring.strokeColor = Self.cyan.cgColor
+        ring.lineWidth = 3
+        root.addSublayer(ring)
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { ring.removeFromSuperlayer() }
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 1; scale.toValue = 2.4
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.9; fade.toValue = 0
+        let group = CAAnimationGroup()
+        group.animations = [scale, fade]
+        group.duration = 0.32
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        ring.opacity = 0
+        ring.add(group, forKey: "pulse")
+        CATransaction.commit()
     }
 
     private func drawCamera(_ debug: DebugState) {

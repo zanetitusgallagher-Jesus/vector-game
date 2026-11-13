@@ -19,12 +19,25 @@ struct MenuContent: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
-        Toggle("AirHands", isOn: $model.isEnabled)
+        Toggle("AirHands  (\(model.store.value.toggleHotkey.displayString))", isOn: $model.isEnabled)
         Text(model.status.label)
+        if model.isEnabled {
+            Button(model.paused ? "Resume Gestures" : "Pause Gestures") { model.setPaused(!model.paused) }
+        }
 
         Divider()
 
-        Toggle("Debug Overlay", isOn: $model.debugOverlay)
+        Button("Calibrate…") { model.openCalibration() }
+        Button("Settings…") { model.openSettings() }
+            .keyboardShortcut(",")
+        Toggle("Debug Overlay", isOn: $model.store.value.debugOverlay)
+        if model.permissions.accessibility != .granted || model.permissions.inputMonitoring != .granted
+            || model.permissions.camera != .granted {
+            Button("⚠︎ Permissions needed…") { model.openOnboarding() }
+        }
+
+        Divider()
+
         if model.isRecording {
             Button("Stop Recording") { model.stopRecording() }
         } else {
@@ -32,11 +45,7 @@ struct MenuContent: View {
                 .disabled(!model.isEnabled)
         }
         Button("Show Recordings") { model.revealRecordings() }
-
-        Divider()
-
-        Button("Calibrate…") {}.disabled(true)    // milestone 5
-        Button("Settings…") {}.disabled(true)     // milestone 5
+        Toggle("Launch at Login", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
 
         Divider()
 

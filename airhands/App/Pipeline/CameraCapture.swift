@@ -30,15 +30,28 @@ enum CameraError: LocalizedError {
 final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let outputQueue = DispatchQueue(label: "airhands.camera.frames", qos: .userInteractive)
     private let sessionQueue = DispatchQueue(label: "airhands.camera.session")
-    private var session: AVCaptureSession?
+    private(set) var session: AVCaptureSession?
     private var device: AVCaptureDevice?
 
     /// Called on `outputQueue` for every frame. Late frames are dropped by AVFoundation,
     /// never queued, so slow processing lowers fps instead of adding latency.
     var onFrame: ((CMSampleBuffer) -> Void)?
 
-    /// Upper bound on capture fps (battery saver lowers this in milestone 6).
-    var maxFPS: Double = 60
+    /// Upper bound on capture fps (battery saver lowers it). Use `setMaxFPS` while running.
+    private(set) var maxFPS: Double = 60
+
+    /// Changes the frame-rate cap, live if the camera is running.
+    func setMaxFPS(_ fps: Double) {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            self.maxFPS = fps
+            guard let device = self.device, (try? device.lockForConfiguration()) != nil else { return }
+            defer { device.unlockForConfiguration() }
+            let supported = device.activeFormat.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? fps
+            let target = max(1, min(fps, supported))
+            device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(target.rounded()))
+        }
+    }
 
     static var authorizationStatus: AVAuthorizationStatus { AVCaptureDevice.authorizationStatus(for: .video) }
 

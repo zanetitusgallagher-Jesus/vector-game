@@ -21,6 +21,14 @@ final class OverlayController {
         rebuild()
     }
 
+    /// Usable display rects (minus menu bar and Dock) in Quartz coordinates, for window snapping.
+    var visibleDisplayRects: [Rect] {
+        NSScreen.screens.map { s in
+            let r = ScreenSpace.quartzRect(s.visibleFrame)
+            return Rect(x: r.minX, y: r.minY, width: r.width, height: r.height)
+        }
+    }
+
     /// Display rects in Quartz global coordinates, for `ScreenMapper`.
     var displayRects: [Rect] {
         NSScreen.screens.map { s in
@@ -62,6 +70,6 @@ final class OverlayController {
 
     /// The debug HUD lives on the display with the menu bar.
     private func updateHUDPlacement() {
-        for (i, p) in panels.enumerated() { p.view.showsHUD = debugEnabled && i == 0 }
+        for (i, p) in panels.enumerated() { p.view.showsHUD = debugEnabled && i == 0; p.view.isPrimary = i == 0 }
     }
 }

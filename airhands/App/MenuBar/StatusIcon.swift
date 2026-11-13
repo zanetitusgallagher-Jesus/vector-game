@@ -5,7 +5,8 @@ enum TrackingStatus: Equatable {
     case starting
     case on            // camera running, no hand in view
     case tracking      // a hand is being tracked
-    case pausedTyping  // milestone 3
+    case pausedTyping  // typing auto-pause
+    case paused        // stop gesture / menu
     case error(String)
 
     var label: String {
@@ -15,6 +16,7 @@ enum TrackingStatus: Equatable {
         case .on: "On — no hand in view"
         case .tracking: "Tracking"
         case .pausedTyping: "Paused — typing"
+        case .paused: "Paused — hold an open palm still to resume"
         case .error(let msg): "Error: \(msg)"
         }
     }
@@ -30,7 +32,8 @@ enum StatusIcon {
         case .off: symbol = "hand.raised.slash"; color = .systemGray
         case .starting, .on: symbol = "hand.raised"; color = nil
         case .tracking: symbol = "hand.point.up.left.fill"; color = NSColor(calibratedRed: 0.2, green: 0.9, blue: 1, alpha: 1)
-        case .pausedTyping: symbol = "keyboard"; color = .systemOrange
+        case .pausedTyping: symbol = "hand.raised.fill"; color = .systemOrange
+        case .paused: symbol = "pause.circle"; color = .systemGray
         case .error: symbol = "exclamationmark.triangle"; color = .systemOrange
         }
         let base = NSImage(systemSymbolName: symbol, accessibilityDescription: "AirHands \(status.label)")
