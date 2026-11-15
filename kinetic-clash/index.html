@@ -112,7 +112,7 @@ button.alt{border-color:#ff5a6e;background:rgba(255,90,110,.12)}
     <button id="bKey1" class="alt">KEYBOARD · 1P vs CPU</button>
     <button id="bKey2" class="alt">KEYBOARD · 2 PLAYERS</button>
   </div>
-  <div class="btns" style="margin-top:12px"><button id="bTut" class="alt" style="font-size:13px;padding:8px 14px"></button></div>
+  <div class="btns" style="margin-top:12px"><button id="bTut" class="alt" style="font-size:13px;padding:8px 14px"></button><button id="bSens" class="alt" style="font-size:13px;padding:8px 14px"></button></div>
   <div id="camStat" class="sub" style="margin-top:18px"></div>
   <div class="help">
     <b>Body controls (upper body only — no feet needed)</b> — pump your arms like running to run · tilt your shoulders to steer · twist shoulders to look · hop up to jump · duck down &amp; pop up for a super jump · fast arm thrust = punch · forearms crossed at face = block · clap overhead = ULTIMATE.<br>
@@ -807,8 +807,10 @@ function newSlot(i) {
   return { i, tracked: false, img: null, wld: null, cx: i ? 0.75 : 0.25, lastSeen: 0,
     fI: mk(66, 1.4, 6), fW: mk(99, 1.4, 2.5),
     cal: { unit: 0.2, shY: 0.35, shX: 0.5, shW: 0.12, armLen: 0.55, kneeR: [0.9, 0.9], done: false, prog: 0 },
-    g: newGesture(), events: [] };
+    g: newGesture(), events: [], tune: { pump: 1, punch: 1, jump: 1, duck: 1, tilt: 1 } };
 }
+const SENS = { level: (() => { try { return localStorage.getItem('kc_sens') || 'easy'; } catch (e) { return 'easy'; } })(), f: { easy: 0.72, normal: 1, strict: 1.3 } };
+const sensF = () => SENS.f[SENS.level] || 1;
 function newGesture() {
   return { move: 0, turn: 0, lean: 0, camYaw: 0, crouch: false, crouchT: 0, block: false, blockT: 0, blockOff: 0, feet: true, pitch: 0, armsDown: false,
     reach: -1, reachT: 0, reachAim: 0, tposeT: 0, armUp: [false, false], armsUpT: 0, armsUpFired: false, lastWide: -9, lastBlock: -9, lastHigh: -9, lastWideHigh: -9,
@@ -893,7 +895,9 @@ function emit(s, ev, data) { s.events.push({ ev, data, t: performance.now() / 10
 // Image coords are mirrored: x grows to the right of the screen, y grows downward.
 function computeGestures(s, dt, now) {
   const I = s.img, Wl = s.wld, g = s.g, c = s.cal;
-  const vis = k => I[k].v > 0.5;
+  const vis = k => I[k].v > ((k >= 13 && k <= 16) ? 0.35 : 0.5);   // wrists/elbows: keep tracking when partly out of view
+  const sf = sensF(), tn = s.tune, pk = g.pk || (g.pk = { pump: 0, punch: 0, jump: 0, duck: 0, tilt: 0 });
+  for (const key in pk) pk[key] *= Math.max(0, 1 - dt * 0.6);   // peaks decay
   const shC = mid(I[11], I[12]), hipC = { x: shC.x, y: shC.y + 1.0 * (c.unit || 0.2) };
   const shWnow = Math.max(0.03, Math.abs(I[11].x - I[12].x));
   // shoulder-twist estimate (world z difference) so turning sideways doesn't shrink the body unit
@@ -910,7 +914,8 @@ function computeGestures(s, dt, now) {
   // Real jogging in place works too: knees (if visible) and the shoulder bounce also count.
   const armDiff = (I[15].y - I[16].y) / T;
   if (g.hands) {
-    const sgn = armDiff > 0.22 ? 1 : armDiff < -0.22 ? -1 : 0;
+    const pumpTh = 0.18 * sf * tn.pump; pk.pump = Math.max(pk.pump, Math.abs(armDiff) / pumpTh);
+    const sgn = armDiff > pumpTh ? 1 : armDiff < -pumpTh ? -1 : 0;
     const lowEnough = I[15].y > shC.y - 0.1 * T && I[16].y > shC.y - 0.1 * T;   // hands below shoulder line = running arms, not a raise
     if (sgn && sgn !== g.armSide && lowEnough) { if (g.armSide) { g.steps.push(now); g.lastStep = now; } g.armSide = sgn; }
   }
@@ -926,16 +931,21 @@ function computeGestures(s, dt, now) {
   g.move += (runT - g.move) * Math.min(1, dt * (runT > g.move ? 10 : 4));
   // ---------- LEAN to steer: tilt your shoulders (one shoulder lower than the other), head shift helps
   const roll = Math.atan2(I[12].y - I[11].y, I[12].x - I[11].x);
-  g.lean = roll + clamp((I[0].x - shC.x) / T, -0.5, 0.5) * 0.35;
-  const al = Math.abs(g.lean); g.turn = al < 0.08 ? 0 : Math.sign(g.lean) * clamp((al - 0.08) / 0.2, 0, 1);
+  const oneArmUp = (I[15].y < I[11].y) !== (I[16].y < I[12].y);           // a raised arm tilts the shoulders: rely on the head then
+  const leanRaw = (oneArmUp ? 0 : roll) + clamp((I[0].x - shC.x) / T, -0.5, 0.5) * (oneArmUp ? 0.9 : 0.35);
+  g.lean += (leanRaw - g.lean) * Math.min(1, dt * 7);                        // smooth out jitter from arm pumping
+  const dz = 0.07 * sf * tn.tilt, al = Math.abs(g.lean); pk.tilt = Math.max(pk.tilt, al / dz);
+  g.turn = al < dz ? 0 : Math.sign(g.lean) * clamp((al - dz) / (0.18 * sf * tn.tilt), 0, 1);
   // ---------- JUMP: shoulders pop up fast (a hop or a quick bounce up on your toes)
-  if (!g.inAir && shUp > 0.1 && shVy < -0.8 && now - g.lastJump > 0.45) { g.inAir = true; g.lastJump = now; emit(s, 'jump'); }
+  const jTh = 0.08 * sf * tn.jump; pk.jump = Math.max(pk.jump, Math.min(shUp / jTh, -shVy / (0.7 * sf * tn.jump)));
+  if (!g.inAir && shUp > jTh && shVy < -0.7 * sf * tn.jump && now - g.lastJump > 0.45) { g.inAir = true; g.lastJump = now; emit(s, 'jump'); }
   if (g.inAir && (shUp < 0.05 || now - g.lastJump > 1.0)) g.inAir = false;
   // ---------- CROUCH: duck down (shoulders drop); popping back up fires crouchUp → super jump
-  const sq = shUp < -0.28 && !g.inAir;
+  const dTh = 0.22 * sf * tn.duck; pk.duck = Math.max(pk.duck, -shUp / dTh);
+  const sq = shUp < -dTh && !g.inAir;
   g.crouchT = sq ? g.crouchT + dt : 0;
   if (!g.crouch && g.crouchT > 0.12) g.crouch = true;
-  if (g.crouch && shUp > -0.14) { g.crouch = false; emit(s, 'crouchUp'); }
+  if (g.crouch && shUp > -dTh * 0.5) { g.crouch = false; emit(s, 'crouchUp'); }
   // slow re-baseline while standing still
   if (c.done && !g.inAir && !g.crouch && now - g.lastStep > 1.5 && Math.abs(shVy) < 0.3 && Math.abs(shUp) < 0.2) {
     c.shY += (shC.y - c.shY) * 0.03;
@@ -964,10 +974,11 @@ function computeGestures(s, dt, now) {
     if (!wv[k] || !g.prevRel) continue;
     const pr = g.prevRel[k], vel = { x: (rel[k].x - pr.x) / dt, y: (rel[k].y - pr.y) / dt, z: (rel[k].z - pr.z) / dt };
     const outSp = (vel.x * rel[k].x + vel.y * rel[k].y + vel.z * rel[k].z) / Math.max(0.05, ext[k]);
-    const sp2 = Math.hypot(v2[k].x, v2[k].y), away2 = (v2[k].x * (k ? 1 : -1)) > 2.5 || -v2[k].y > 2.5;
+    const sp2 = Math.hypot(v2[k].x, v2[k].y), away2 = (v2[k].x * (k ? 1 : -1)) > 2.2 * sf || -v2[k].y > 2.2 * sf;
     const height = r2[k].y > -0.75 && r2[k].y < 0.45;          // between belly and just above shoulder
-    const fwd = rel[k].z > 0.12 || out2[k] > 0.35;
-    const p3 = outSp > 1.3 && ext[k] > 0.55 * A && fwd, p2 = sp2 > 4 && away2 && out2[k] > 0.2;
+    const fwd = rel[k].z > 0.08 || out2[k] > 0.3;
+    const pTh = sf * tn.punch; if (height && fwd) pk.punch = Math.max(pk.punch, Math.max(outSp / 1.1, away2 ? sp2 / 3.5 : 0) / pTh);
+    const p3 = outSp > 1.1 * pTh && ext[k] > 0.5 * A && fwd, p2 = sp2 > 3.5 * pTh && away2 && out2[k] > 0.2;
     // not a punch: hands coming up to the face (block), arms flung wide (plane / net), or a mostly-vertical raise (thread / arms up)
     const toFace = Math.abs(wr2[k].x - nose.x) < 0.4 * T && r2[k].y > -0.1 && ext[k] < 0.72 * A;
     const wide = out2[0] > 0.45 && out2[1] > 0.45;
@@ -1777,11 +1788,11 @@ const acc = (st, on, dt, need) => (st.a = (st.a || 0) + (on ? dt : 0)) >= need;
 function tutSteps(h, i) {
   const k = KT[i], id = h.def.id;
   const S = [
-    { t: 'RUN', fig: 'pump', cam: 'Pump your arms like you are running (hands swinging up and down, elbows bent). Faster pumping = faster running.', key: `Hold ${k.run}`, s: 'pump arms like running', chk: (h, I, st, dt) => acc(st, I.move > 0.4, dt, 1.5) },
-    { t: 'STEER', fig: 'lean', cam: 'Tilt your shoulders — drop one shoulder lower than the other (like leaning into a turn) to steer that way. Twist your shoulders to look around.', key: `${k.steer} to turn`, s: 'tilt shoulders left / right', chk: (h, I, st, dt) => acc(st, Math.abs(I.turn) > 0.4, dt, 1) },
-    { t: 'JUMP', fig: 'jump', cam: 'Hop up — a quick bounce up on your toes is enough. The camera watches your shoulders.', key: `Press ${k.jump}`, s: 'quick hop up', chk: (h, I) => I.jump },
-    { t: id === 'ti' ? 'MEGA LEAP' : 'SUPER JUMP', fig: 'squat', cam: 'Duck down (bend your knees so your shoulders drop), hold a second, then pop back up fast to launch high.' + (id === 'ti' ? ' Bulwark leaps across whole blocks!' : ''), key: `Hold ${k.crouch}, then let go`, s: 'duck down, pop up', chk: h => h.didSuper },
-    { t: 'PUNCH', fig: 'punch', cam: 'Throw a fast punch straight at the screen. Up close, a hard punch sends them flying.', key: `Press ${k.punch}`, s: 'fast punch at the screen', chk: (h, I) => I.punch },
+    { t: 'RUN', fig: 'pump', cam: 'Pump your arms like you are running (hands swinging up and down, elbows bent). Faster pumping = faster running.', key: `Hold ${k.run}`, s: 'pump arms like running', tune: 'pump', chk: (h, I, st, dt) => acc(st, I.move > 0.4, dt, 1.5) },
+    { t: 'STEER', fig: 'lean', cam: 'Tilt your shoulders — drop one shoulder lower than the other (like leaning into a turn) to steer that way. Twist your shoulders to look around.', key: `${k.steer} to turn`, s: 'tilt shoulders left / right', tune: 'tilt', chk: (h, I, st, dt) => acc(st, Math.abs(I.turn) > 0.4, dt, 1) },
+    { t: 'JUMP', fig: 'jump', cam: 'Hop up — a quick bounce up on your toes is enough. The camera watches your shoulders.', key: `Press ${k.jump}`, s: 'quick hop up', tune: 'jump', chk: (h, I) => I.jump },
+    { t: id === 'ti' ? 'MEGA LEAP' : 'SUPER JUMP', fig: 'squat', cam: 'Duck down (bend your knees so your shoulders drop), hold a second, then pop back up fast to launch high.' + (id === 'ti' ? ' Bulwark leaps across whole blocks!' : ''), key: `Hold ${k.crouch}, then let go`, s: 'duck down, pop up', tune: 'duck', chk: h => h.didSuper },
+    { t: 'PUNCH', fig: 'punch', cam: 'Throw a fast punch straight at the screen. Up close, a hard punch sends them flying.', key: `Press ${k.punch}`, s: 'fast punch at the screen', tune: 'punch', chk: (h, I) => I.punch },
     { t: 'BLOCK', fig: 'block', cam: 'Cross your forearms in front of your face and hold.', key: `Hold ${k.block}`, s: 'forearms crossed at face', chk: (h, I, st, dt) => acc(st, h.block, dt, 0.6) },
     { t: 'CLIMB', fig: 'run', cam: 'Steer toward a building and keep pumping your arms straight into its wall — you run right up it onto the roof.', key: `Steer at a building, hold ${k.run}`, s: 'run into a wall', chk: (h, I, st, dt) => acc(st, h.wallRun, dt, 0.4) || h.pos.y > 6 },
   ];
@@ -1836,6 +1847,12 @@ function updateTutorial(dt) {
     const pose = GAME.ctl[i] === 'pose';
     if (t.ok > 0) { t.ok -= dt; if (t.ok <= 0) next(i); }
     else if (S.chk(h, h.lastI || blankIntent(), t.st, dt)) { t.ok = 0.9; AU.play('select'); fx('burst', h.chest(), h.def.acc, 30, 8); }
+    // learns YOUR version of the move: after 4 s of trying, if you got at least 35% of the way there, lower that move's trigger to fit you
+    if (pose && S.tune && t.ok <= 0 && t.time > 4) {
+      const sl = POSE.slots[i], pv = sl.g.pk ? sl.g.pk[S.tune] : 0;
+      if (pv > 0.35 && pv < 1 && !t.st.tuned) { sl.tune[S.tune] = Math.max(0.3, sl.tune[S.tune] * pv * 0.85); t.st.tuned = true; t.time = 0; h.say('Adjusted to your style — try again!', 2); }
+      else if (t.st.tuned && t.time > 4 && pv > 0.35 && pv < 1) { sl.tune[S.tune] = Math.max(0.3, sl.tune[S.tune] * pv * 0.85); t.time = 0; }
+    }
     if (KEDGE.has('Tab') || t.time > 25) next(i, true);
     const col = i ? '#ff5a6e' : '#33e0ff';
     const key = `${t.n}|${t.ok > 0}|${pose}|${t.time > 12}`;
@@ -1913,7 +1930,7 @@ function updateHUD() {
     const mv = (GAME.state === 'match' || GAME.state === 'countdown') && GAME.movesT > 0; U.moves.classList.toggle('hidden', !mv); if (mv && !U.moves.dataset.on) { U.moves.innerHTML = movesHTML(h, i); U.moves.dataset.on = 1; }
     const gShow = pose && s.g.lastEv && performance.now() - s.g.lastEvT < 900; U.gev.classList.toggle('hidden', !gShow); if (gShow) { const t = '▶ ' + s.g.lastEv.split(' ')[0].replace(/([A-Z])/g, ' $1').toUpperCase(); if (U.gev.textContent !== t) U.gev.textContent = t; }
     U.dbg.classList.toggle('hidden', !DEBUG);
-    if (DEBUG) U.dbg.textContent = (pose ? (s.g.label + (s.g.lastEv && performance.now() - s.g.lastEvT < 1500 ? '\n▶ ' + s.g.lastEv.toUpperCase() : '')) : (GAME.ctl[i] === 'cpu' ? 'CPU' : 'KEYBOARD')) + `\npose ${POSE.fps} fps · people ${POSE.count}`;
+    if (DEBUG) U.dbg.textContent = (pose ? (s.g.label + (s.g.lastEv && performance.now() - s.g.lastEvT < 1500 ? '\n▶ ' + s.g.lastEv.toUpperCase() : '')) : (GAME.ctl[i] === 'cpu' ? 'CPU' : 'KEYBOARD')) + `\npose ${POSE.fps} fps (${POSE.model}) · people ${POSE.count} · ${SENS.level}` + (pose ? ' · tune ' + Object.entries(s.tune).filter(([k, v]) => v !== 1).map(([k, v]) => k + ' ' + v.toFixed(2)).join(' ') : '');
     let msg = h.msgT > 0 ? h.msg : (h.ult >= 100 ? (pose ? '★ ULTIMATE READY — CLAP OVERHEAD' : '★ ULTIMATE READY (' + (i ? 'U' : 'T') + ')') : '');
     if (WORLD.slowT > 0 && WORLD.slowOwner && WORLD.slowOwner !== h) msg = '⏳ TIME SLOWED';
     U.msg.textContent = msg; U.msg.style.fontSize = h.msgT > 0 && h.msg.length > 14 ? '26px' : (msg.length > 16 ? '20px' : '44px');
@@ -2111,6 +2128,8 @@ function toWinner() {
 $('bCam').onclick = () => startCamMode(1);
 $('bCam2').onclick = () => startCamMode(2);
 const tutBtn = () => { $('bTut').textContent = 'TRAINING BEFORE EACH MATCH: ' + (TUT.on ? 'ON' : 'OFF'); };
+const sensBtn = () => { $('bSens').textContent = 'MOVE DETECTION: ' + ({ easy: 'EASY (forgiving)', normal: 'NORMAL', strict: 'STRICT' })[SENS.level]; };
+$('bSens').onclick = () => { SENS.level = ({ easy: 'normal', normal: 'strict', strict: 'easy' })[SENS.level]; try { localStorage.setItem('kc_sens', SENS.level); } catch (e) { } sensBtn(); }; sensBtn();
 $('bTut').onclick = () => { TUT.on = !TUT.on; try { localStorage.setItem('kc_tut', TUT.on ? '1' : '0'); } catch (e) { } tutBtn(); }; tutBtn();
 $('bKey1').onclick = () => { AU.init(); GAME.camMode = false; GAME.humans = 1; GAME.forceP2 = false; toSelect(); };
 $('bKey2').onclick = () => { AU.init(); GAME.camMode = false; GAME.humans = 2; toSelect(); };
