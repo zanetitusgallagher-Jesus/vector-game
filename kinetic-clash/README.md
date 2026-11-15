@@ -28,4 +28,5 @@ Open it from any static server (camera access needs `https://` or `localhost`). 
 - **Debug:** D shows the gesture debug label in camera mode. In keyboard mode use F3 or the backquote key (`).
 - **Exit:** Esc returns to the title.
 - **Training:** before each match, every player goes through a short guided tutorial. It shows a stick-figure picture of each move and waits until the game sees you do it. Tab skips a step and Backspace skips the whole tutorial. You can turn it off on the title screen. During the match, a moves list stays on screen for the first 25 seconds; press H to show or hide it.
+- **Move detection:** a title-screen button sets how forgiving detection is: Easy (the default), Normal or Strict. During training, if you do a move but not quite hard enough, the game adjusts that move's trigger to fit you.
 - **First to 5 KOs wins**, followed by a replay of the final KO.
